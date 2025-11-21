@@ -135,6 +135,8 @@ The following files still need to be copied/migrated from the original app:
 ## 📚 Documentation
 
 - Database setup: `database/setup.md`
+- Authentication: `AUTHENTICATION.md` - Native mobile auth implementation
+- Documentation index: `docs/README.md`
 - API routes: See `apps/web/src/app/api/` (once migrated)
 - Mobile screens: See `apps/mobile/src/app/` (once migrated)
 
