@@ -154,7 +154,7 @@ export async function POST(request) {
             ${JSON.stringify(recipeJson.ingredients)},
             ${JSON.stringify(recipeJson.instructions)},
             ${JSON.stringify(recipeJson.nutrition || { calories: 300, protein: 15, carbs: 30, fat: 10 })},
-            ${["ai-generated", "image-recognized"]},
+            ${JSON.stringify(["ai-generated", "image-recognized"])},
             ${"ai"},
             ${12.0},
             ${4.2},
@@ -186,7 +186,7 @@ export async function POST(request) {
         ${userId ? userId : null},
         ${imageUrl},
         ${analysisJson.dish_name},
-        ${analysisJson.detected_ingredients},
+        ${JSON.stringify(analysisJson.detected_ingredients)},
         ${analysisJson.confidence},
         ${generatedRecipe?.id || null}
       ) RETURNING *

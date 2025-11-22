@@ -32,7 +32,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
-import { getApiUrl } from "@/utils/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -41,7 +40,9 @@ export default function RecipeDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auth, isAuthenticated, signIn } = useAuth();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  // Handle id as potentially an array (expo-router can return arrays)
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [isFavorited, setIsFavorited] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
@@ -61,12 +62,17 @@ export default function RecipeDetailScreen() {
   } = useQuery({
     queryKey: ["recipe", id],
     queryFn: async () => {
-      const apiUrl = getApiUrl();
+      if (!id) {
+        throw new Error("Recipe ID is required");
+      }
+      
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const response = await fetch(
         `${apiUrl}/api/recipes/${id}?userId=${auth?.user?.id || ""}`,
       );
       if (!response.ok) {
-        throw new Error("Failed to fetch recipe");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch recipe");
       }
       return response.json();
     },
@@ -85,7 +91,11 @@ export default function RecipeDetailScreen() {
         throw new Error("Please sign in to save recipes");
       }
 
-      const apiUrl = getApiUrl();
+      if (!id) {
+        throw new Error("Recipe ID is required");
+      }
+
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const url = `${apiUrl}/api/saved-recipes`;
 
       if (action === "save") {
@@ -99,7 +109,7 @@ export default function RecipeDetailScreen() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || "Failed to save recipe");
         }
 
@@ -111,7 +121,7 @@ export default function RecipeDetailScreen() {
         );
 
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || "Failed to remove recipe");
         }
 

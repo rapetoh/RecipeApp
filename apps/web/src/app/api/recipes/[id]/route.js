@@ -4,6 +4,8 @@ import sql from "@/app/api/utils/sql";
 export async function GET(request, { params }) {
   try {
     const { id } = params;
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
 
     const recipes = await sql`
       SELECT 
@@ -22,9 +24,29 @@ export async function GET(request, { params }) {
       );
     }
 
+    let recipe = recipes[0];
+    
+    // Check if recipe is saved for the user if userId is provided
+    if (userId) {
+      const savedRecipe = await sql`
+        SELECT id FROM saved_recipes 
+        WHERE user_id = ${userId}::uuid AND recipe_id = ${parseInt(id)}
+        LIMIT 1
+      `;
+      recipe = {
+        ...recipe,
+        is_saved: savedRecipe.length > 0,
+      };
+    } else {
+      recipe = {
+        ...recipe,
+        is_saved: false,
+      };
+    }
+
     return Response.json({
       success: true,
-      data: recipes[0],
+      data: recipe,
     });
   } catch (error) {
     console.error("Error fetching recipe:", error);
