@@ -178,27 +178,11 @@ export default function RecipeDetailScreen() {
       return;
     }
 
-    // Navigate to meal planning or track cooking
-    Alert.alert(
-      "Start Cooking",
-      "Would you like to add this to your meal plan or start cooking now?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Add to Meal Plan",
-          onPress: () => router.push("/meal-planning"),
-        },
-        {
-          text: "Start Cooking",
-          style: "default",
-          onPress: () =>
-            Alert.alert(
-              "Feature Coming Soon",
-              "Cooking timer and step-by-step guide coming soon!",
-            ),
-        },
-      ],
-    );
+    // Navigate directly to cooking mode
+    router.push({
+      pathname: "/cooking-mode",
+      params: { id: id },
+    });
   };
 
   const onScroll = (event) => {
@@ -378,6 +362,15 @@ export default function RecipeDetailScreen() {
           <Text style={[styles.recipeTitle, { fontFamily: "Inter_700Bold" }]}>
             {recipe.name}
           </Text>
+
+          {/* AI-Generated Badge */}
+          {recipe.creator_type === "ai" && (
+            <View style={styles.aiBadge}>
+              <Text style={[styles.aiBadgeText, { fontFamily: "Inter_500Medium" }]}>
+                AI-Generated
+              </Text>
+            </View>
+          )}
 
           {/* Author Line */}
           <Text style={[styles.authorText, { fontFamily: "Inter_400Regular" }]}>
@@ -622,6 +615,20 @@ const styles = StyleSheet.create({
     lineHeight: 29,
     color: "#000000",
     marginBottom: 10,
+  },
+  aiBadge: {
+    backgroundColor: "#FF9F1C",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+    marginBottom: 10,
+  },
+  aiBadgeText: {
+    fontSize: 12,
+    color: "#FFFFFF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   authorText: {
     fontSize: 17,

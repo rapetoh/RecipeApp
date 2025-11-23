@@ -89,7 +89,7 @@ export default function ProfileScreen() {
         router.push("/meal-planning");
         break;
       case "settings":
-        Alert.alert("Settings", "Settings feature coming soon!");
+        router.push("/preferences");
         break;
       case "notifications":
         Alert.alert("Notifications", "No new notifications");
@@ -130,8 +130,8 @@ export default function ProfileScreen() {
     },
     {
       id: "settings",
-      title: "Settings",
-      subtitle: "App preferences",
+      title: "Preferences",
+      subtitle: "Food & meal settings",
       icon: Settings,
       color: "#607D8B",
       requiresAuth: false,

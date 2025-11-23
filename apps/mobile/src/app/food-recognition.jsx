@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Alert,
   Platform,
+  TextInput,
+  ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -16,7 +18,7 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { ChevronLeft, Camera, ImageIcon, Loader } from "lucide-react-native";
+import { ChevronLeft, Camera, ImageIcon, Loader, Search } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -32,6 +34,7 @@ export default function FoodRecognitionScreen() {
   const [upload, { loading: uploadLoading }] = useUpload();
   const [selectedImage, setSelectedImage] = useState(null);
   const [recognitionResult, setRecognitionResult] = useState(null);
+  const [dishName, setDishName] = useState("");
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -165,7 +168,64 @@ export default function FoodRecognitionScreen() {
     router.push(`/recipe-detail?id=${recipeId}`);
   };
 
-  const isLoading = uploadLoading || recognitionMutation.isPending;
+  // Dish name search mutation - generates recipe using AI
+  const dishNameSearchMutation = useMutation({
+    mutationFn: async (query) => {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/generate-recipe-from-name`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dishName: query,
+          userId: auth?.user?.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to generate recipe");
+      }
+
+      const data = await response.json();
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.success && data.data && data.data.recipe) {
+        const recipe = data.data.recipe;
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        handleViewRecipe(recipe.id);
+      } else {
+        Alert.alert(
+          "Recipe Not Found",
+          `We couldn't generate a recipe for '${dishName}'. Please check the spelling or try another name.`,
+        );
+      }
+    },
+    onError: (error) => {
+      console.error("Recipe generation error:", error);
+      Alert.alert(
+        "Error",
+        error.message || `We couldn't generate a recipe for '${dishName}'. Please check the spelling or try another name.`,
+      );
+    },
+  });
+
+  const handleGenerateRecipe = () => {
+    if (!dishName.trim()) {
+      Alert.alert("Empty Input", "Please enter a dish name");
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    dishNameSearchMutation.mutate(dishName.trim());
+  };
+
+  const isLoading = uploadLoading || recognitionMutation.isPending || dishNameSearchMutation.isPending;
 
   if (!fontsLoaded) {
     return null;
@@ -180,13 +240,27 @@ export default function FoodRecognitionScreen() {
         <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
           <ChevronLeft size={22} color="#000000" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
-          Food Recognition
-        </Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
+            Recipe Assistant
+          </Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
+      
+      {/* Subtitle */}
+      <View style={styles.subtitleContainer}>
+        <Text style={[styles.headerSubtitle, { fontFamily: "Inter_400Regular" }]}>
+          Get a recipe from a photo or a dish name.
+        </Text>
+      </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
         {/* Selected Image */}
         {selectedImage && (
           <View style={styles.imageContainer}>
@@ -316,22 +390,13 @@ export default function FoodRecognitionScreen() {
           </View>
         )}
 
-        {/* Action Buttons */}
+        {/* Photo Section */}
         {!selectedImage && (
-          <View style={styles.actionsContainer}>
+          <View style={styles.section}>
             <Text
-              style={[
-                styles.instructionsTitle,
-                { fontFamily: "Inter_700Bold" },
-              ]}
+              style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              Take or Upload a Photo
-            </Text>
-            <Text
-              style={[styles.instructions, { fontFamily: "Inter_400Regular" }]}
-            >
-              Take a photo of any dish and get an instant recipe with
-              ingredients and cooking instructions
+              Use a photo
             </Text>
 
             <TouchableOpacity
@@ -367,11 +432,14 @@ export default function FoodRecognitionScreen() {
           </View>
         )}
 
-        {/* Retry Button */}
+        {/* Retry Button for Photo */}
         {selectedImage && !isLoading && (
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() => setSelectedImage(null)}
+            onPress={() => {
+              setSelectedImage(null);
+              setRecognitionResult(null);
+            }}
           >
             <Text
               style={[
@@ -383,7 +451,66 @@ export default function FoodRecognitionScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+
+        {/* OR Separator */}
+        {!selectedImage && (
+          <View style={styles.separatorContainer}>
+            <View style={styles.separatorLine} />
+            <Text style={[styles.separatorText, { fontFamily: "Inter_400Regular" }]}>
+              OR
+            </Text>
+            <View style={styles.separatorLine} />
+          </View>
+        )}
+
+        {/* Dish Name Section */}
+        {!selectedImage && (
+          <View style={styles.section}>
+            <Text
+              style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}
+            >
+              Use a dish name
+            </Text>
+
+            <TextInput
+              style={styles.textInput}
+              placeholder="Type a dish (e.g. 'Pepperoni Pizza' or 'Bibimbap')"
+              placeholderTextColor="#999999"
+              value={dishName}
+              onChangeText={setDishName}
+              onSubmitEditing={handleGenerateRecipe}
+              returnKeyType="search"
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.generateButton,
+                (dishNameSearchMutation.isPending || !dishName.trim()) &&
+                  styles.generateButtonDisabled,
+              ]}
+              onPress={handleGenerateRecipe}
+              disabled={dishNameSearchMutation.isPending || !dishName.trim()}
+            >
+              {dishNameSearchMutation.isPending ? (
+                <Loader size={20} color="#FFFFFF" />
+              ) : (
+                <Search size={20} color="#FFFFFF" />
+              )}
+              <Text
+                style={[
+                  styles.generateButtonText,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                {dishNameSearchMutation.isPending
+                  ? "Searching..."
+                  : "Generate Recipe"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -410,16 +537,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
   headerTitle: {
     fontSize: 18,
     color: "#000000",
+    textAlign: "center",
+  },
+  subtitleContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+    textAlign: "center",
   },
   placeholder: {
     width: 38,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  content: {
     paddingHorizontal: 16,
+    paddingTop: 20,
   },
   imageContainer: {
     position: "relative",
@@ -522,25 +672,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666666",
   },
-  actionsContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  instructionsTitle: {
-    fontSize: 24,
-    color: "#000000",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  instructions: {
-    fontSize: 16,
-    color: "#666666",
-    textAlign: "center",
-    lineHeight: 24,
+  section: {
     marginBottom: 32,
-    paddingHorizontal: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    color: "#000000",
+    marginBottom: 16,
+  },
+  separatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+    paddingHorizontal: 16,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E0E0E0",
+  },
+  separatorText: {
+    fontSize: 14,
+    color: "#999999",
+    marginHorizontal: 16,
+  },
+  textInput: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  generateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000000",
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+  },
+  generateButtonDisabled: {
+    opacity: 0.5,
+  },
+  generateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginLeft: 8,
   },
   actionButton: {
     flexDirection: "row",

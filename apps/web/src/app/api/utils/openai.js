@@ -130,6 +130,34 @@ Make it realistic and delicious. Include 6-10 ingredients and 4-8 clear steps.`,
 }
 
 /**
+ * Generate image using DALL-E
+ */
+export async function generateImageWithDALLE(dishName) {
+  if (!openai) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  try {
+    const response = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt: `A professional food photography image of ${dishName}, appetizing, well-lit, high quality, restaurant style, on a white plate, top-down view`,
+      size: '1024x1024',
+      quality: 'standard',
+      n: 1,
+    });
+
+    if (!response.data || !response.data[0]?.url) {
+      throw new Error('No image URL returned from DALL-E');
+    }
+
+    return response.data[0].url;
+  } catch (error) {
+    console.error('DALL-E image generation error:', error);
+    throw error;
+  }
+}
+
+/**
  * Get personalized recipe recommendation
  */
 export async function getRecipeRecommendation(userProfile, recentMeals, candidateRecipes, mealType) {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { useRouter } from "expo-router";
+import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Menu, Bell, Camera, Settings } from "lucide-react-native";
@@ -41,6 +41,47 @@ export default function HomeScreen() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // Check if user needs onboarding
+  const { data: preferencesData, isLoading: preferencesLoading, refetch: refetchPreferences } = useQuery({
+    queryKey: ["preferences", auth?.user?.id],
+    queryFn: async () => {
+      if (!auth?.user?.id) return null;
+      try {
+        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const response = await fetch(`${apiUrl}/api/preferences?userId=${auth.user.id}`);
+        if (!response.ok) return null;
+        const result = await response.json();
+        return result.success ? result.data : null;
+      } catch (error) {
+        console.error("Error checking preferences:", error);
+        return null;
+      }
+    },
+    enabled: !!auth?.user?.id && isAuthenticated,
+    staleTime: 0, // Always refetch to get latest data
+    refetchOnMount: true, // Refetch when component mounts
+  });
+
+  // Redirect to onboarding if user is authenticated but hasn't completed onboarding
+  useEffect(() => {
+    // Only redirect if we're done loading and user is authenticated
+    if (
+      isAuthenticated &&
+      auth?.user?.id &&
+      !preferencesLoading &&
+      preferencesData !== undefined
+    ) {
+      // If preferences don't exist or onboardingCompleted is false, redirect to onboarding
+      if (!preferencesData || !preferencesData.onboardingCompleted) {
+        // Add a small delay to prevent race condition with cache invalidation
+        const timer = setTimeout(() => {
+          router.replace("/onboarding-goals");
+        }, 200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isAuthenticated, auth?.user?.id, preferencesData, preferencesLoading, router]);
 
   // Fetch daily recommendations
   const { data: recommendationData, isLoading: recommendationLoading } =
@@ -194,8 +235,15 @@ export default function HomeScreen() {
   const userName = auth?.user?.name?.split(" ")[0] || "User";
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar style="light" backgroundColor="transparent" />
+    <>
+      <Stack.Screen 
+        options={{ 
+          gestureEnabled: false, // Disable swipe-back gesture to prevent going back to onboarding
+          headerShown: false 
+        }} 
+      />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" backgroundColor="transparent" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -323,20 +371,20 @@ export default function HomeScreen() {
             <Text
               style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
             >
-              Take a photo and get the recipe instantly with AI
+              Use a photo or type any dish name to get a recipe.
             </Text>
             <TouchableOpacity
               style={styles.promoButton}
               onPress={handleFoodRecognitionPress}
             >
-              <Camera size={18} color="#FFFFFF" />
+              <Text style={styles.promoButtonIcon}>⚡</Text>
               <Text
                 style={[
                   styles.promoButtonText,
                   { fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                Scan Food
+                Get instant Recipe
               </Text>
             </TouchableOpacity>
           </View>
@@ -437,6 +485,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
     </View>
+    </>
   );
 }
 
@@ -608,6 +657,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
+  },
+  promoButtonIcon: {
+    fontSize: 18,
   },
   promoButtonText: {
     color: "#FFFFFF",
