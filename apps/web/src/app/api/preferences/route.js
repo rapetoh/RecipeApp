@@ -38,29 +38,66 @@ export async function GET(request) {
       );
     }
 
-    // Get user preferences from users table
-    const userPrefs = await sql`
-      SELECT 
-        id,
-        diet_type,
-        allergies,
-        dislikes,
-        preferred_cuisines,
-        experience_level,
-        cooking_schedule,
-        goals,
-        cooking_skill,
-        preferred_cooking_time,
-        people_count,
-        daily_suggestion_enabled,
-        daily_suggestion_time,
-        weekly_plan_enabled,
-        weekly_plan_days,
-        measurement_system,
-        onboarding_completed
-      FROM users
-      WHERE id = ${userId}::uuid
+    // Check if apply_preferences_in_assistant column exists
+    const columnExists = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name = 'apply_preferences_in_assistant'
     `;
+    const hasApplyPreferencesColumn = columnExists.length > 0;
+
+    // Get user preferences from users table
+    // Conditionally include apply_preferences_in_assistant if column exists
+    let userPrefs;
+    if (hasApplyPreferencesColumn) {
+      userPrefs = await sql`
+        SELECT 
+          id,
+          diet_type,
+          allergies,
+          dislikes,
+          preferred_cuisines,
+          experience_level,
+          cooking_schedule,
+          goals,
+          cooking_skill,
+          preferred_cooking_time,
+          people_count,
+          daily_suggestion_enabled,
+          daily_suggestion_time,
+          weekly_plan_enabled,
+          weekly_plan_days,
+          measurement_system,
+          onboarding_completed,
+          apply_preferences_in_assistant
+        FROM users
+        WHERE id = ${userId}::uuid
+      `;
+    } else {
+      userPrefs = await sql`
+        SELECT 
+          id,
+          diet_type,
+          allergies,
+          dislikes,
+          preferred_cuisines,
+          experience_level,
+          cooking_schedule,
+          goals,
+          cooking_skill,
+          preferred_cooking_time,
+          people_count,
+          daily_suggestion_enabled,
+          daily_suggestion_time,
+          weekly_plan_enabled,
+          weekly_plan_days,
+          measurement_system,
+          onboarding_completed
+        FROM users
+        WHERE id = ${userId}::uuid
+      `;
+    }
 
     if (userPrefs.length === 0) {
       // User exists but no preferences yet
@@ -91,6 +128,9 @@ export async function GET(request) {
       weeklyPlanDays: prefs.weekly_plan_days || ["mon", "tue", "wed", "thu", "fri"],
       measurementSystem: prefs.measurement_system || "metric",
       onboardingCompleted: prefs.onboarding_completed || false,
+      applyPreferencesInAssistant: hasApplyPreferencesColumn 
+        ? (prefs.apply_preferences_in_assistant !== false) 
+        : true, // Default to true if column doesn't exist yet
     };
 
     return Response.json({
@@ -133,6 +173,15 @@ export async function POST(request) {
       );
     }
 
+    // Check if apply_preferences_in_assistant column exists
+    const columnExists = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name = 'apply_preferences_in_assistant'
+    `;
+    const hasApplyPreferencesColumn = columnExists.length > 0;
+
     // Transform frontend format to database format
     // diet_type is TEXT[] in DB, so wrap string in array (or null)
     const dietTypeValue = body.dietType 
@@ -157,6 +206,11 @@ export async function POST(request) {
       onboarding_completed: body.onboardingCompleted || false,
     };
 
+    // Only add apply_preferences_in_assistant if column exists
+    if (hasApplyPreferencesColumn) {
+      preferencesData.apply_preferences_in_assistant = body.applyPreferencesInAssistant !== false;
+    }
+
     // Check if user preferences row exists
     const existingPrefs = await sql`
       SELECT id FROM users WHERE id = ${userId}::uuid
@@ -164,57 +218,116 @@ export async function POST(request) {
 
     if (existingPrefs.length === 0) {
       // Insert new preferences
-      await sql`
-        INSERT INTO users (
-          id, diet_type, allergies, dislikes, preferred_cuisines,
-          experience_level, goals, cooking_skill, preferred_cooking_time,
-          people_count, daily_suggestion_enabled, daily_suggestion_time,
-          weekly_plan_days, weekly_plan_enabled, measurement_system,
-          onboarding_completed, created_at, updated_at
-        )
-        VALUES (
-          ${userId}::uuid,
-          ${preferencesData.diet_type},
-          ${preferencesData.allergies},
-          ${preferencesData.dislikes},
-          ${preferencesData.preferred_cuisines},
-          ${preferencesData.experience_level},
-          ${preferencesData.goals},
-          ${preferencesData.cooking_skill},
-          ${preferencesData.preferred_cooking_time},
-          ${preferencesData.people_count},
-          ${preferencesData.daily_suggestion_enabled},
-          ${preferencesData.daily_suggestion_time},
-          ${preferencesData.weekly_plan_days},
-          ${preferencesData.weekly_plan_enabled},
-          ${preferencesData.measurement_system},
-          ${preferencesData.onboarding_completed},
-          NOW(),
-          NOW()
-        )
-      `;
+      if (hasApplyPreferencesColumn) {
+        await sql`
+          INSERT INTO users (
+            id, diet_type, allergies, dislikes, preferred_cuisines,
+            experience_level, goals, cooking_skill, preferred_cooking_time,
+            people_count, daily_suggestion_enabled, daily_suggestion_time,
+            weekly_plan_days, weekly_plan_enabled, measurement_system,
+            onboarding_completed, apply_preferences_in_assistant, created_at, updated_at
+          )
+          VALUES (
+            ${userId}::uuid,
+            ${preferencesData.diet_type},
+            ${preferencesData.allergies},
+            ${preferencesData.dislikes},
+            ${preferencesData.preferred_cuisines},
+            ${preferencesData.experience_level},
+            ${preferencesData.goals},
+            ${preferencesData.cooking_skill},
+            ${preferencesData.preferred_cooking_time},
+            ${preferencesData.people_count},
+            ${preferencesData.daily_suggestion_enabled},
+            ${preferencesData.daily_suggestion_time},
+            ${preferencesData.weekly_plan_days},
+            ${preferencesData.weekly_plan_enabled},
+            ${preferencesData.measurement_system},
+            ${preferencesData.onboarding_completed},
+            ${preferencesData.apply_preferences_in_assistant},
+            NOW(),
+            NOW()
+          )
+        `;
+      } else {
+        // Insert without apply_preferences_in_assistant column
+        await sql`
+          INSERT INTO users (
+            id, diet_type, allergies, dislikes, preferred_cuisines,
+            experience_level, goals, cooking_skill, preferred_cooking_time,
+            people_count, daily_suggestion_enabled, daily_suggestion_time,
+            weekly_plan_days, weekly_plan_enabled, measurement_system,
+            onboarding_completed, created_at, updated_at
+          )
+          VALUES (
+            ${userId}::uuid,
+            ${preferencesData.diet_type},
+            ${preferencesData.allergies},
+            ${preferencesData.dislikes},
+            ${preferencesData.preferred_cuisines},
+            ${preferencesData.experience_level},
+            ${preferencesData.goals},
+            ${preferencesData.cooking_skill},
+            ${preferencesData.preferred_cooking_time},
+            ${preferencesData.people_count},
+            ${preferencesData.daily_suggestion_enabled},
+            ${preferencesData.daily_suggestion_time},
+            ${preferencesData.weekly_plan_days},
+            ${preferencesData.weekly_plan_enabled},
+            ${preferencesData.measurement_system},
+            ${preferencesData.onboarding_completed},
+            NOW(),
+            NOW()
+          )
+        `;
+      }
     } else {
       // Update existing preferences
-      await sql`
-        UPDATE users SET
-          diet_type = ${preferencesData.diet_type},
-          allergies = ${preferencesData.allergies},
-          dislikes = ${preferencesData.dislikes},
-          preferred_cuisines = ${preferencesData.preferred_cuisines},
-          experience_level = ${preferencesData.experience_level},
-          goals = ${preferencesData.goals},
-          cooking_skill = ${preferencesData.cooking_skill},
-          preferred_cooking_time = ${preferencesData.preferred_cooking_time},
-          people_count = ${preferencesData.people_count},
-          daily_suggestion_enabled = ${preferencesData.daily_suggestion_enabled},
-          daily_suggestion_time = ${preferencesData.daily_suggestion_time},
-          weekly_plan_enabled = ${preferencesData.weekly_plan_enabled},
-          weekly_plan_days = ${preferencesData.weekly_plan_days},
-          measurement_system = ${preferencesData.measurement_system},
-          onboarding_completed = ${preferencesData.onboarding_completed},
-          updated_at = NOW()
-        WHERE id = ${userId}::uuid
-      `;
+      if (hasApplyPreferencesColumn) {
+        await sql`
+          UPDATE users SET
+            diet_type = ${preferencesData.diet_type},
+            allergies = ${preferencesData.allergies},
+            dislikes = ${preferencesData.dislikes},
+            preferred_cuisines = ${preferencesData.preferred_cuisines},
+            experience_level = ${preferencesData.experience_level},
+            goals = ${preferencesData.goals},
+            cooking_skill = ${preferencesData.cooking_skill},
+            preferred_cooking_time = ${preferencesData.preferred_cooking_time},
+            people_count = ${preferencesData.people_count},
+            daily_suggestion_enabled = ${preferencesData.daily_suggestion_enabled},
+            daily_suggestion_time = ${preferencesData.daily_suggestion_time},
+            weekly_plan_enabled = ${preferencesData.weekly_plan_enabled},
+            weekly_plan_days = ${preferencesData.weekly_plan_days},
+            measurement_system = ${preferencesData.measurement_system},
+            onboarding_completed = ${preferencesData.onboarding_completed},
+            apply_preferences_in_assistant = ${preferencesData.apply_preferences_in_assistant},
+            updated_at = NOW()
+          WHERE id = ${userId}::uuid
+        `;
+      } else {
+        // Update without apply_preferences_in_assistant column
+        await sql`
+          UPDATE users SET
+            diet_type = ${preferencesData.diet_type},
+            allergies = ${preferencesData.allergies},
+            dislikes = ${preferencesData.dislikes},
+            preferred_cuisines = ${preferencesData.preferred_cuisines},
+            experience_level = ${preferencesData.experience_level},
+            goals = ${preferencesData.goals},
+            cooking_skill = ${preferencesData.cooking_skill},
+            preferred_cooking_time = ${preferencesData.preferred_cooking_time},
+            people_count = ${preferencesData.people_count},
+            daily_suggestion_enabled = ${preferencesData.daily_suggestion_enabled},
+            daily_suggestion_time = ${preferencesData.daily_suggestion_time},
+            weekly_plan_enabled = ${preferencesData.weekly_plan_enabled},
+            weekly_plan_days = ${preferencesData.weekly_plan_days},
+            measurement_system = ${preferencesData.measurement_system},
+            onboarding_completed = ${preferencesData.onboarding_completed},
+            updated_at = NOW()
+          WHERE id = ${userId}::uuid
+        `;
+      }
     }
 
     console.log("Successfully saved preferences for user:", userId);

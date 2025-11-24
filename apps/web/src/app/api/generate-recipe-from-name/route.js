@@ -1,6 +1,48 @@
 import sql from "@/app/api/utils/sql";
 import { generateRecipeWithGPT, generateImageWithDALLE } from "@/app/api/utils/openai";
 
+// Helper function to fetch user preferences
+async function getUserPreferences(userId) {
+  if (!userId) return null;
+  
+  try {
+    const userPrefs = await sql`
+      SELECT 
+        diet_type,
+        allergies,
+        dislikes,
+        preferred_cuisines,
+        goals,
+        cooking_skill,
+        preferred_cooking_time,
+        people_count,
+        apply_preferences_in_assistant
+      FROM users
+      WHERE id = ${userId}::uuid
+    `;
+    
+    if (userPrefs.length === 0) return null;
+    
+    const prefs = userPrefs[0];
+    return {
+      dietType: (prefs.diet_type && Array.isArray(prefs.diet_type) && prefs.diet_type.length > 0) 
+        ? prefs.diet_type[0] 
+        : (prefs.diet_type || null),
+      allergies: prefs.allergies || [],
+      dislikedIngredients: prefs.dislikes || [],
+      favoriteCuisines: prefs.preferred_cuisines || [],
+      goals: prefs.goals || [],
+      cookingSkill: prefs.cooking_skill || "beginner",
+      preferredCookingTime: prefs.preferred_cooking_time || "15_30",
+      peopleCount: prefs.people_count || 1,
+      applyPreferencesInAssistant: prefs.apply_preferences_in_assistant !== false, // Default to true
+    };
+  } catch (error) {
+    console.error("Error fetching user preferences:", error);
+    return null; // Return null on error, don't break the flow
+  }
+}
+
 // POST /api/generate-recipe-from-name - Generate recipe from dish name
 export async function POST(request) {
   try {
@@ -52,9 +94,18 @@ export async function POST(request) {
       category: "main",
     };
 
+    // Fetch user preferences if userId is provided
+    const userPreferences = await getUserPreferences(userId);
+    const applyPreferences = userPreferences?.applyPreferencesInAssistant !== false; // Default to true
+
     let recipeJson;
     try {
-      recipeJson = await generateRecipeWithGPT(trimmedDishName, analysis);
+      recipeJson = await generateRecipeWithGPT(
+        trimmedDishName, 
+        analysis,
+        userPreferences,
+        applyPreferences
+      );
       
       // Validate that we got a meaningful recipe
       if (!recipeJson.name || !recipeJson.ingredients || !recipeJson.instructions) {

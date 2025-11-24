@@ -1,6 +1,48 @@
 import sql from "@/app/api/utils/sql";
 import { analyzeImageWithVision, generateRecipeWithGPT } from "@/app/api/utils/openai";
 
+// Helper function to fetch user preferences
+async function getUserPreferences(userId) {
+  if (!userId) return null;
+  
+  try {
+    const userPrefs = await sql`
+      SELECT 
+        diet_type,
+        allergies,
+        dislikes,
+        preferred_cuisines,
+        goals,
+        cooking_skill,
+        preferred_cooking_time,
+        people_count,
+        apply_preferences_in_assistant
+      FROM users
+      WHERE id = ${userId}::uuid
+    `;
+    
+    if (userPrefs.length === 0) return null;
+    
+    const prefs = userPrefs[0];
+    return {
+      dietType: (prefs.diet_type && Array.isArray(prefs.diet_type) && prefs.diet_type.length > 0) 
+        ? prefs.diet_type[0] 
+        : (prefs.diet_type || null),
+      allergies: prefs.allergies || [],
+      dislikedIngredients: prefs.dislikes || [],
+      favoriteCuisines: prefs.preferred_cuisines || [],
+      goals: prefs.goals || [],
+      cookingSkill: prefs.cooking_skill || "beginner",
+      preferredCookingTime: prefs.preferred_cooking_time || "15_30",
+      peopleCount: prefs.people_count || 1,
+      applyPreferencesInAssistant: prefs.apply_preferences_in_assistant !== false, // Default to true
+    };
+  } catch (error) {
+    console.error("Error fetching user preferences:", error);
+    return null; // Return null on error, don't break the flow
+  }
+}
+
 // Helper function to convert image URL to base64
 async function imageUrlToBase64(imageUrl) {
   try {
@@ -131,8 +173,17 @@ export async function POST(request) {
     if (!useExistingRecipe) {
       console.log("Generating new recipe for:", analysisJson.dish_name);
 
+      // Fetch user preferences if userId is provided
+      const userPreferences = await getUserPreferences(userId);
+      const applyPreferences = userPreferences?.applyPreferencesInAssistant !== false; // Default to true
+
       try {
-        const recipeJson = await generateRecipeWithGPT(analysisJson.dish_name, analysisJson);
+        const recipeJson = await generateRecipeWithGPT(
+          analysisJson.dish_name, 
+          analysisJson,
+          userPreferences,
+          applyPreferences
+        );
 
         console.log("Recipe Json:", recipeJson);
 

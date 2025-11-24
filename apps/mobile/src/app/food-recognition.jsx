@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   Alert,
   Platform,
   TextInput,
+  Animated,
   ScrollView,
+  Keyboard,
+  Dimensions,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -15,10 +19,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useFonts,
   Inter_400Regular,
+  Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { ChevronLeft, Camera, ImageIcon, Loader, Search } from "lucide-react-native";
+import {
+  ChevronLeft,
+  Camera,
+  ImageIcon,
+  Loader,
+  Search,
+  Type,
+  Sparkles,
+  Clock,
+  TrendingUp,
+} from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -32,18 +47,46 @@ export default function FoodRecognitionScreen() {
   const router = useRouter();
   const { auth } = useAuth();
   const [upload, { loading: uploadLoading }] = useUpload();
+
+  // Mode state (scan vs search)
+  const [activeMode, setActiveMode] = useState("scan"); // "scan" or "search"
   const [selectedImage, setSelectedImage] = useState(null);
   const [recognitionResult, setRecognitionResult] = useState(null);
-  const [dishName, setDishName] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [searchHistory, setSearchHistory] = useState([]);
+
+  // Animation refs
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const searchInputRef = useRef(null);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
+    Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
   });
 
-  // Food recognition mutation
-  const recognitionMutation = useMutation({
+  // Popular food searches for suggestions
+  const popularSearches = [
+    "🍕 Pizza",
+    "🍝 Pasta",
+    "🍔 Burger",
+    "🍜 Ramen",
+    "🥗 Caesar Salad",
+    "🌮 Tacos",
+    "🍖 Steak",
+    "🍰 Chocolate Cake",
+  ];
+
+  useEffect(() => {
+    // Load search history from storage if needed
+    // For now using static data - you can integrate with AsyncStorage later
+    setSearchHistory(["Chicken Curry", "Beef Stir Fry", "Chocolate Brownies"]);
+  }, []);
+
+  // Photo recognition mutation (existing backend)
+  const photoRecognitionMutation = useMutation({
     mutationFn: async (imageUrl) => {
       const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/food-recognition`, {
@@ -51,7 +94,7 @@ export default function FoodRecognitionScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageUrl,
-          userId: auth?.user?.id, // Use actual user ID
+          userId: auth?.user?.id,
         }),
       });
 
@@ -75,19 +118,112 @@ export default function FoodRecognitionScreen() {
     },
     onError: (error) => {
       console.error("Recognition error:", error);
-      let errorMessage = "Failed to analyze the image. Please try again.";
-
-      if (error.message.includes("Failed to process")) {
-        errorMessage =
-          "Could not process the image. Please try a different photo.";
-      } else if (error.message.includes("Failed to analyze")) {
-        errorMessage =
-          "Could not identify food in this image. Try a clearer photo of a dish.";
-      }
-
-      Alert.alert("Analysis Failed", errorMessage);
+      Alert.alert(
+        "Analysis Failed",
+        "Failed to analyze the image. Please try again."
+      );
     },
   });
+
+  // Text search mutation (existing backend - using generate-recipe-from-name)
+  const textSearchMutation = useMutation({
+    mutationFn: async (foodName) => {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/generate-recipe-from-name`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dishName: foodName.trim(),
+          userId: auth?.user?.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to find recipe");
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.success && data.data && data.data.recipe) {
+        // Convert the response to match recognition result format for consistent UI
+        const recipe = data.data.recipe;
+        setRecognitionResult({
+          analysis: {
+            dish_name: recipe.name,
+            cuisine: recipe.cuisine || "Global",
+            difficulty: recipe.difficulty || "medium",
+            detected_ingredients: Array.isArray(recipe.ingredients)
+              ? recipe.ingredients.map((ing) => 
+                  typeof ing === "string" ? ing : ing.name || ing.ingredient || ""
+                ).filter(Boolean)
+              : [],
+          },
+          generatedRecipe: recipe,
+          similarRecipes: [],
+        });
+
+        // Add to search history
+        if (searchText.trim() && !searchHistory.includes(searchText.trim())) {
+          setSearchHistory((prev) => [searchText.trim(), ...prev.slice(0, 4)]);
+        }
+
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+      } else {
+        throw new Error("Invalid response format");
+      }
+    },
+    onError: (error) => {
+      console.error("Search error:", error);
+      Alert.alert(
+        "Search Failed",
+        "Couldn't find a recipe for that food. Try a different name or be more specific."
+      );
+    },
+  });
+
+  const handleModeSwitch = (mode) => {
+    if (mode === activeMode) return;
+
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    // Reset state when switching modes
+    setSelectedImage(null);
+    setRecognitionResult(null);
+    setSearchText("");
+    Keyboard.dismiss();
+
+    // Animate mode transition
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: mode === "search" ? 1 : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      // Defer state update to avoid "useInsertionEffect must not schedule updates" error
+      // This ensures the update happens outside React's commit phase
+      setTimeout(() => {
+        setActiveMode(mode);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      }, 0);
+    });
+  };
 
   const handleBackPress = () => {
     if (Platform.OS !== "web") {
@@ -104,7 +240,7 @@ export default function FoodRecognitionScreen() {
       if (permissionResult.granted === false) {
         Alert.alert(
           "Permission Required",
-          "Camera permission is required to take photos.",
+          "Camera permission is required to take photos."
         );
         return;
       }
@@ -123,7 +259,6 @@ export default function FoodRecognitionScreen() {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to take photo. Please try again.");
-      console.error("Camera error:", error);
     }
   };
 
@@ -143,96 +278,77 @@ export default function FoodRecognitionScreen() {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to select photo. Please try again.");
-      console.error("Gallery error:", error);
     }
   };
 
   const analyzeImage = async (imageAsset) => {
     try {
-      // Upload the image first
       const uploadResult = await upload({ reactNativeAsset: imageAsset });
 
       if (uploadResult.error) {
         throw new Error(uploadResult.error);
       }
 
-      // Analyze the uploaded image
-      recognitionMutation.mutate(uploadResult.url);
+      photoRecognitionMutation.mutate(uploadResult.url);
     } catch (error) {
       Alert.alert("Error", "Failed to upload image. Please try again.");
-      console.error("Upload error:", error);
     }
+  };
+
+  const handleSearchSubmit = () => {
+    if (!searchText.trim()) {
+      Alert.alert("Empty Search", "Please enter a food name to search.");
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    Keyboard.dismiss();
+    setRecognitionResult(null);
+    textSearchMutation.mutate(searchText);
+  };
+
+  const handleQuickSearch = (foodName) => {
+    const cleanName = foodName.replace(/^\S+\s/, ""); // Remove emoji
+    setSearchText(cleanName);
+    textSearchMutation.mutate(cleanName);
   };
 
   const handleViewRecipe = (recipeId) => {
     router.push(`/recipe-detail?id=${recipeId}`);
   };
 
-  // Dish name search mutation - generates recipe using AI
-  const dishNameSearchMutation = useMutation({
-    mutationFn: async (query) => {
-      const apiUrl = getApiUrl();
-      const response = await fetch(`${apiUrl}/api/generate-recipe-from-name`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dishName: query,
-          userId: auth?.user?.id,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to generate recipe");
-      }
-
-      const data = await response.json();
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data.success && data.data && data.data.recipe) {
-        const recipe = data.data.recipe;
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-        handleViewRecipe(recipe.id);
-      } else {
-        Alert.alert(
-          "Recipe Not Found",
-          `We couldn't generate a recipe for '${dishName}'. Please check the spelling or try another name.`,
-        );
-      }
-    },
-    onError: (error) => {
-      console.error("Recipe generation error:", error);
-      Alert.alert(
-        "Error",
-        error.message || `We couldn't generate a recipe for '${dishName}'. Please check the spelling or try another name.`,
-      );
-    },
-  });
-
-  const handleGenerateRecipe = () => {
-    if (!dishName.trim()) {
-      Alert.alert("Empty Input", "Please enter a dish name");
-      return;
-    }
-
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    dishNameSearchMutation.mutate(dishName.trim());
+  const resetToStart = () => {
+    setSelectedImage(null);
+    setRecognitionResult(null);
+    setSearchText("");
   };
 
-  const isLoading = uploadLoading || recognitionMutation.isPending || dishNameSearchMutation.isPending;
+  const isLoading =
+    uploadLoading ||
+    photoRecognitionMutation.isPending ||
+    textSearchMutation.isPending;
 
-  if (!fontsLoaded) {
-    return null;
-  }
+  if (!fontsLoaded) return null;
+
+  // Calculate tab indicator position - use percentage for reliability
+  const screenWidth = Dimensions.get("window").width;
+  const tabContainerWidth = screenWidth - 32; // padding horizontal 16 on each side
+  const calculatedTabWidth = (tabContainerWidth - 8) / 2; // 8 for padding in tabBackground
+  
+  const tabIndicatorPosition = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, calculatedTabWidth],
+  });
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+    >
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
 
       {/* Header */}
@@ -240,97 +356,348 @@ export default function FoodRecognitionScreen() {
         <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
           <ChevronLeft size={22} color="#000000" />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
-            Recipe Assistant
-          </Text>
-        </View>
+        <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
+          Recipe Generator
+        </Text>
         <View style={styles.placeholder} />
       </View>
-      
-      {/* Subtitle */}
-      <View style={styles.subtitleContainer}>
-        <Text style={[styles.headerSubtitle, { fontFamily: "Inter_400Regular" }]}>
-          Get a recipe from a photo or a dish name.
-        </Text>
+
+      {/* Mode Tabs */}
+      <View style={styles.tabContainer}>
+        <View style={styles.tabBackground}>
+          <Animated.View
+            style={[
+              styles.tabIndicator,
+              { 
+                width: calculatedTabWidth,
+                transform: [{ translateX: tabIndicatorPosition }] 
+              },
+            ]}
+          />
+          <TouchableOpacity
+            style={styles.tab}
+            onPress={() => handleModeSwitch("scan")}
+          >
+            <Camera
+              size={20}
+              color={activeMode === "scan" ? "#FFFFFF" : "#666666"}
+            />
+            <Text
+              style={[
+                styles.tabText,
+                { fontFamily: "Inter_600SemiBold" },
+                activeMode === "scan" && styles.tabTextActive,
+              ]}
+            >
+              Scan Photo
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tab}
+            onPress={() => handleModeSwitch("search")}
+          >
+            <Type
+              size={20}
+              color={activeMode === "search" ? "#FFFFFF" : "#666666"}
+            />
+            <Text
+              style={[
+                styles.tabText,
+                { fontFamily: "Inter_600SemiBold" },
+                activeMode === "search" && styles.tabTextActive,
+              ]}
+            >
+              Search Name
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        style={styles.content}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 20 },
+        ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.content}>
-        {/* Selected Image */}
-        {selectedImage && (
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: selectedImage.uri }}
-              style={styles.selectedImage}
-              contentFit="cover"
-              transition={200}
-            />
+        <Animated.View style={[styles.modeContent, { opacity: fadeAnim }]}>
+          {/* Scan Mode */}
+          {activeMode === "scan" && (
+            <View style={styles.scanMode}>
+              {!selectedImage ? (
+                <View style={styles.scanPrompt}>
+                  <View style={styles.scanIcon}>
+                    <Sparkles size={32} color="#FF9F1C" />
+                  </View>
+                  <Text
+                    style={[
+                      styles.promptTitle,
+                      { fontFamily: "Inter_700Bold" },
+                    ]}
+                  >
+                    Scan Any Dish
+                  </Text>
+                  <Text
+                    style={[
+                      styles.promptSubtitle,
+                      { fontFamily: "Inter_400Regular" },
+                    ]}
+                  >
+                    Take a photo of any food and get an instant recipe with
+                    AI-powered recognition
+                  </Text>
+                  <View style={styles.scanActions}>
+                    <TouchableOpacity
+                      style={styles.primaryAction}
+                      onPress={handleTakePhoto}
+                    >
+                      <Camera size={24} color="#FFFFFF" />
+                      <Text
+                        style={[
+                          styles.primaryActionText,
+                          { fontFamily: "Inter_600SemiBold" },
+                        ]}
+                      >
+                        Take Photo
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.secondaryAction}
+                      onPress={handleSelectPhoto}
+                    >
+                      <ImageIcon size={24} color="#000000" />
+                      <Text
+                        style={[
+                          styles.secondaryActionText,
+                          { fontFamily: "Inter_600SemiBold" },
+                        ]}
+                      >
+                        Choose from Gallery
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.imageAnalysis}>
+                  <View style={styles.imageContainer}>
+                    <Image
+                      source={{ uri: selectedImage.uri }}
+                      style={styles.selectedImage}
+                      contentFit="cover"
+                      transition={200}
+                    />
 
-            {isLoading && (
-              <View style={styles.loadingOverlay}>
-                <Loader size={32} color="#FFFFFF" />
+                    {isLoading && (
+                      <View style={styles.loadingOverlay}>
+                        <Loader size={32} color="#FFFFFF" />
+                        <Text
+                          style={[
+                            styles.loadingText,
+                            { fontFamily: "Inter_600SemiBold" },
+                          ]}
+                        >
+                          Analyzing image...
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Search Mode */}
+          {activeMode === "search" && (
+            <View style={styles.searchMode}>
+              <View style={styles.searchPrompt}>
+                <View style={styles.searchIcon}>
+                  <Search size={32} color="#FF9F1C" />
+                </View>
+                <Text
+                  style={[styles.promptTitle, { fontFamily: "Inter_700Bold" }]}
+                >
+                  Search by Name
+                </Text>
                 <Text
                   style={[
-                    styles.loadingText,
-                    { fontFamily: "Inter_600SemiBold" },
+                    styles.promptSubtitle,
+                    { fontFamily: "Inter_400Regular" },
                   ]}
                 >
-                  Analyzing image...
+                  Enter any food name and get a complete recipe with ingredients
+                  and instructions
                 </Text>
               </View>
-            )}
-          </View>
-        )}
 
-        {/* Recognition Results */}
+              {/* Search Input */}
+              <View style={styles.searchInputContainer}>
+                <TextInput
+                  ref={searchInputRef}
+                  style={[
+                    styles.searchInput,
+                    { fontFamily: "Inter_500Medium" },
+                  ]}
+                  placeholder="Enter food name (e.g., Chicken Tikka Masala)"
+                  placeholderTextColor="#999999"
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  onSubmitEditing={handleSearchSubmit}
+                  returnKeyType="search"
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.searchButton,
+                    isLoading && styles.searchButtonDisabled,
+                  ]}
+                  onPress={handleSearchSubmit}
+                  disabled={isLoading || !searchText.trim()}
+                >
+                  {isLoading ? (
+                    <Loader size={20} color="#FFFFFF" />
+                  ) : (
+                    <Search size={20} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Search Options */}
+              {!recognitionResult && (
+                <View style={styles.quickSearchContainer}>
+                  {/* Popular Searches */}
+                  <View style={styles.searchSection}>
+                    <View style={styles.sectionHeader}>
+                      <TrendingUp size={16} color="#FF9F1C" />
+                      <Text
+                        style={[
+                          styles.sectionTitle,
+                          { fontFamily: "Inter_600SemiBold" },
+                        ]}
+                      >
+                        Popular Searches
+                      </Text>
+                    </View>
+                    <View style={styles.searchTags}>
+                      {popularSearches.map((food, index) => (
+                        <TouchableOpacity
+                          key={index}
+                          style={styles.searchTag}
+                          onPress={() => handleQuickSearch(food)}
+                        >
+                          <Text
+                            style={[
+                              styles.searchTagText,
+                              { fontFamily: "Inter_500Medium" },
+                            ]}
+                          >
+                            {food}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Recent Searches */}
+                  {searchHistory.length > 0 && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.sectionHeader}>
+                        <Clock size={16} color="#666666" />
+                        <Text
+                          style={[
+                            styles.sectionTitle,
+                            { fontFamily: "Inter_600SemiBold" },
+                          ]}
+                        >
+                          Recent Searches
+                        </Text>
+                      </View>
+                      <View style={styles.historyList}>
+                        {searchHistory.map((search, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={styles.historyItem}
+                            onPress={() => handleQuickSearch(search)}
+                          >
+                            <Text
+                              style={[
+                                styles.historyText,
+                                { fontFamily: "Inter_400Regular" },
+                              ]}
+                            >
+                              {search}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+        </Animated.View>
+
+        {/* Results Section (shared) */}
         {recognitionResult && (
           <View style={styles.resultsContainer}>
             <Text
               style={[styles.resultsTitle, { fontFamily: "Inter_700Bold" }]}
             >
-              Analysis Results
+              Recipe Found!
             </Text>
-
             <View style={styles.analysisCard}>
               <Text
                 style={[styles.dishName, { fontFamily: "Inter_600SemiBold" }]}
               >
-                {recognitionResult.analysis.dish_name}
+                {recognitionResult.analysis?.dish_name ||
+                  recognitionResult.recipe?.name}
               </Text>
-              <Text
-                style={[styles.confidence, { fontFamily: "Inter_400Regular" }]}
-              >
-                Confidence:{" "}
-                {Math.round(recognitionResult.analysis.confidence * 100)}%
-              </Text>
+              {recognitionResult.analysis?.confidence && (
+                <Text
+                  style={[
+                    styles.confidence,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  Confidence:{" "}
+                  {Math.round(recognitionResult.analysis.confidence * 100)}%
+                </Text>
+              )}
               <Text
                 style={[styles.cuisine, { fontFamily: "Inter_400Regular" }]}
               >
-                {recognitionResult.analysis.cuisine} •{" "}
-                {recognitionResult.analysis.difficulty}
+                {recognitionResult.analysis?.cuisine ||
+                  recognitionResult.recipe?.cuisine ||
+                  "International"}{" "}
+                • {recognitionResult.analysis?.difficulty || "Medium"}
               </Text>
-
-              <Text
-                style={[
-                  styles.ingredientsLabel,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Detected Ingredients:
-              </Text>
-              <Text
-                style={[styles.ingredients, { fontFamily: "Inter_400Regular" }]}
-              >
-                {recognitionResult.analysis.detected_ingredients.join(", ")}
-              </Text>
+              {recognitionResult.analysis?.detected_ingredients &&
+                recognitionResult.analysis.detected_ingredients.length > 0 && (
+                  <>
+                    <Text
+                      style={[
+                        styles.ingredientsLabel,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      Main Ingredients:
+                    </Text>
+                    <Text
+                      style={[
+                        styles.ingredients,
+                        { fontFamily: "Inter_400Regular" },
+                      ]}
+                    >
+                      {recognitionResult.analysis.detected_ingredients.join(", ")}
+                    </Text>
+                  </>
+                )}
             </View>
 
-            {/* Generated Recipe */}
+            {/* Generated Recipe Button */}
             {recognitionResult.generatedRecipe && (
               <TouchableOpacity
                 style={styles.recipeButton}
@@ -344,7 +711,7 @@ export default function FoodRecognitionScreen() {
                     { fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  View Generated Recipe
+                  View Complete Recipe
                 </Text>
               </TouchableOpacity>
             )}
@@ -381,137 +748,31 @@ export default function FoodRecognitionScreen() {
                           { fontFamily: "Inter_400Regular" },
                         ]}
                       >
-                        ⭐ {recipe.average_rating}
+                        ⭐ {recipe.average_rating || "4.0"}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
-          </View>
-        )}
 
-        {/* Photo Section */}
-        {!selectedImage && (
-          <View style={styles.section}>
-            <Text
-              style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}
-            >
-              Use a photo
-            </Text>
-
+            {/* Try Again Button */}
             <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleTakePhoto}
+              style={styles.tryAgainButton}
+              onPress={resetToStart}
             >
-              <Camera size={24} color="#FFFFFF" />
               <Text
                 style={[
-                  styles.actionButtonText,
+                  styles.tryAgainText,
                   { fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                Take Photo
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton]}
-              onPress={handleSelectPhoto}
-            >
-              <ImageIcon size={24} color="#000000" />
-              <Text
-                style={[
-                  styles.actionButtonText,
-                  styles.secondaryButtonText,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Choose from Gallery
+                Try Another {activeMode === "scan" ? "Photo" : "Search"}
               </Text>
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Retry Button for Photo */}
-        {selectedImage && !isLoading && (
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              setSelectedImage(null);
-              setRecognitionResult(null);
-            }}
-          >
-            <Text
-              style={[
-                styles.retryButtonText,
-                { fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
-              Try Another Photo
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* OR Separator */}
-        {!selectedImage && (
-          <View style={styles.separatorContainer}>
-            <View style={styles.separatorLine} />
-            <Text style={[styles.separatorText, { fontFamily: "Inter_400Regular" }]}>
-              OR
-            </Text>
-            <View style={styles.separatorLine} />
-          </View>
-        )}
-
-        {/* Dish Name Section */}
-        {!selectedImage && (
-          <View style={styles.section}>
-            <Text
-              style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}
-            >
-              Use a dish name
-            </Text>
-
-            <TextInput
-              style={styles.textInput}
-              placeholder="Type a dish (e.g. 'Pepperoni Pizza' or 'Bibimbap')"
-              placeholderTextColor="#999999"
-              value={dishName}
-              onChangeText={setDishName}
-              onSubmitEditing={handleGenerateRecipe}
-              returnKeyType="search"
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.generateButton,
-                (dishNameSearchMutation.isPending || !dishName.trim()) &&
-                  styles.generateButtonDisabled,
-              ]}
-              onPress={handleGenerateRecipe}
-              disabled={dishNameSearchMutation.isPending || !dishName.trim()}
-            >
-              {dishNameSearchMutation.isPending ? (
-                <Loader size={20} color="#FFFFFF" />
-              ) : (
-                <Search size={20} color="#FFFFFF" />
-              )}
-              <Text
-                style={[
-                  styles.generateButtonText,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                {dishNameSearchMutation.isPending
-                  ? "Searching..."
-                  : "Generate Recipe"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -537,38 +798,228 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: "center",
-  },
   headerTitle: {
     fontSize: 18,
     color: "#000000",
-    textAlign: "center",
-  },
-  subtitleContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#666666",
-    textAlign: "center",
   },
   placeholder: {
     width: 38,
   },
-  scrollView: {
+  // Tab System
+  tabContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  tabBackground: {
+    backgroundColor: "#F8F8F8",
+    borderRadius: 12,
+    padding: 4,
+    flexDirection: "row",
+    position: "relative",
+  },
+  tabIndicator: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    height: 40, // Approximate height (44 - 4 padding on each side)
+    backgroundColor: "#000000",
+    borderRadius: 8,
+    zIndex: 0,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    zIndex: 1,
+  },
+  tabText: {
+    fontSize: 14,
+    color: "#666666",
+    marginLeft: 6,
+  },
+  tabTextActive: {
+    color: "#FFFFFF",
+  },
+  // Content Areas
+  content: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    flexGrow: 1,
   },
-  content: {
+  modeContent: {
+    flex: 1,
     paddingHorizontal: 16,
+  },
+  // Scan Mode
+  scanMode: {
+    flex: 1,
+  },
+  scanPrompt: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  scanIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: "#FFF5E6",
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  promptTitle: {
+    fontSize: 28,
+    color: "#000000",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  promptSubtitle: {
+    fontSize: 16,
+    color: "#666666",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
+  scanActions: {
+    width: "100%",
+    gap: 16,
+  },
+  primaryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#000000",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+  },
+  primaryActionText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  secondaryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  secondaryActionText: {
+    color: "#000000",
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  // Search Mode
+  searchMode: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  searchPrompt: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  searchIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: "#FFF5E6",
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  searchInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 24,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#000000",
+    paddingVertical: 16,
+  },
+  searchButton: {
+    backgroundColor: "#000000",
+    borderRadius: 12,
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  searchButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+  },
+  // Quick Search
+  quickSearchContainer: {
+    flex: 1,
+  },
+  searchSection: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    color: "#000000",
+    marginLeft: 8,
+  },
+  searchTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  searchTag: {
+    backgroundColor: "#F8F8F8",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  searchTagText: {
+    fontSize: 14,
+    color: "#000000",
+  },
+  historyList: {
+    gap: 4,
+  },
+  historyItem: {
+    backgroundColor: "#FAFAFA",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  historyText: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  // Image Analysis
+  imageAnalysis: {
+    flex: 1,
     paddingTop: 20,
   },
   imageContainer: {
@@ -576,7 +1027,6 @@ const styles = StyleSheet.create({
     height: 300,
     borderRadius: 12,
     overflow: "hidden",
-    marginTop: 20,
   },
   selectedImage: {
     width: "100%",
@@ -597,24 +1047,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 12,
   },
+  // Results
   resultsContainer: {
-    marginTop: 20,
+    marginTop: 24,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
   },
   resultsTitle: {
-    fontSize: 20,
+    fontSize: 24,
     color: "#000000",
-    marginBottom: 16,
+    marginBottom: 20,
+    textAlign: "center",
   },
   analysisCard: {
     backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF9F1C",
   },
   dishName: {
-    fontSize: 18,
+    fontSize: 20,
     color: "#000000",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   confidence: {
     fontSize: 14,
@@ -624,12 +1080,12 @@ const styles = StyleSheet.create({
   cuisine: {
     fontSize: 14,
     color: "#666666",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   ingredientsLabel: {
     fontSize: 14,
     color: "#000000",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   ingredients: {
     fontSize: 14,
@@ -637,29 +1093,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   recipeButton: {
-    backgroundColor: "#000000",
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: "#FF9F1C",
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: "#FF9F1C",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   recipeButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
   },
   similarContainer: {
-    marginTop: 8,
+    backgroundColor: "#FAFAFA",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   similarTitle: {
     fontSize: 16,
     color: "#000000",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   similarItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
@@ -672,91 +1140,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666666",
   },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    color: "#000000",
-    marginBottom: 16,
-  },
-  separatorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 24,
-    paddingHorizontal: 16,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E0E0E0",
-  },
-  separatorText: {
-    fontSize: 14,
-    color: "#999999",
-    marginHorizontal: 16,
-  },
-  textInput: {
-    backgroundColor: "#F8F9FA",
+  tryAgainButton: {
+    backgroundColor: "#F8F8F8",
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#000000",
-    marginBottom: 16,
+    paddingVertical: 16,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
-  generateButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#000000",
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-  },
-  generateButtonDisabled: {
-    opacity: 0.5,
-  },
-  generateButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#000000",
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    marginBottom: 16,
-    minWidth: 200,
-    justifyContent: "center",
-  },
-  secondaryButton: {
-    backgroundColor: "#F8F8F8",
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    marginLeft: 12,
-  },
-  secondaryButtonText: {
-    color: "#000000",
-  },
-  retryButton: {
-    backgroundColor: "#F8F8F8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  retryButtonText: {
+  tryAgainText: {
     color: "#000000",
     fontSize: 14,
   },

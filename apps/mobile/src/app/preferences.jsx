@@ -42,6 +42,7 @@ import {
   Plus,
   Minus,
   RotateCcw,
+  Sliders,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
@@ -189,6 +190,7 @@ export default function PreferencesScreen() {
   ]);
   const [measurementSystem, setMeasurementSystem] = useState("metric");
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [applyPreferencesInAssistant, setApplyPreferencesInAssistant] = useState(true);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -239,6 +241,7 @@ export default function PreferencesScreen() {
         );
         setMeasurementSystem(prefs.measurementSystem || "metric");
         setOnboardingCompleted(prefs.onboardingCompleted || false);
+        setApplyPreferencesInAssistant(prefs.applyPreferencesInAssistant !== false); // Default to true
       }
     } catch (error) {
       console.error("Error loading preferences:", error);
@@ -278,6 +281,7 @@ export default function PreferencesScreen() {
         weeklyPlanDays,
         measurementSystem,
         onboardingCompleted: onboardingCompleted, // Preserve onboarding status
+        applyPreferencesInAssistant,
       };
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
@@ -343,6 +347,7 @@ export default function PreferencesScreen() {
             setWeeklyPlanEnabled(false);
             setWeeklyPlanDays(["mon", "tue", "wed", "thu", "fri"]);
             setMeasurementSystem("metric");
+            setApplyPreferencesInAssistant(true);
 
             setResetting(false);
 
@@ -474,6 +479,42 @@ export default function PreferencesScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Recipe Assistant Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Sliders size={24} color="#FF9F1C" />
+            <View style={styles.sectionHeaderText}>
+              <Text style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}>
+                Recipe Assistant
+              </Text>
+              <Text style={[styles.sectionSubtitle, { fontFamily: "Inter_400Regular" }]}>
+                Control how preferences are applied when generating recipes
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchRowContent}>
+              <Text
+                style={[styles.switchLabel, { fontFamily: "Inter_600SemiBold" }]}
+              >
+                Apply My Preferences
+              </Text>
+              <Text
+                style={[styles.switchSubtext, { fontFamily: "Inter_400Regular" }]}
+              >
+                Adapt recipes to match your diet, allergies, cuisines, and cooking preferences. Allergies and strict diets are always enforced for safety.
+              </Text>
+            </View>
+            <Switch
+              value={applyPreferencesInAssistant}
+              onValueChange={setApplyPreferencesInAssistant}
+              trackColor={{ false: "#E8E8E8", true: "#FF9F1C" }}
+              thumbColor={applyPreferencesInAssistant ? "#FFFFFF" : "#CCCCCC"}
+            />
+          </View>
+        </View>
+
         {/* Goals Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}>

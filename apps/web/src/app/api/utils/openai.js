@@ -73,19 +73,66 @@ Rules:
 
 /**
  * Generate recipe using OpenAI
+ * @param {string} dishName - Name of the dish to generate recipe for
+ * @param {object} analysis - Analysis object from image recognition (optional)
+ * @param {object} preferences - User preferences object (optional)
+ * @param {boolean} applyPreferences - Whether to apply soft preferences (default: true)
  */
-export async function generateRecipeWithGPT(dishName, analysis) {
+export async function generateRecipeWithGPT(dishName, analysis = null, preferences = null, applyPreferences = true) {
   if (!openai) {
     throw new Error('OpenAI API key not configured');
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: `Create a detailed recipe for "${dishName}". Respond with ONLY a JSON object:
+    // Build hard constraints (ALWAYS enforced for safety)
+    const hardConstraints = [];
+    if (preferences?.allergies && preferences.allergies.length > 0) {
+      hardConstraints.push(`ALLERGIES/INTOLERANCES TO AVOID: ${preferences.allergies.join(', ')}`);
+    }
+    
+    // Check for strict diet types (vegan, vegetarian, halal, kosher)
+    const strictDiets = ['vegan', 'vegetarian', 'halal', 'kosher'];
+    if (preferences?.dietType && strictDiets.includes(preferences.dietType.toLowerCase())) {
+      hardConstraints.push(`STRICT DIET TYPE: ${preferences.dietType}`);
+    }
+    
+    if (preferences?.dislikedIngredients && preferences.dislikedIngredients.length > 0) {
+      hardConstraints.push(`NEVER USE THESE INGREDIENTS: ${preferences.dislikedIngredients.join(', ')}`);
+    }
+
+    // Build soft preferences (only when applyPreferences=true and relevant)
+    const softPreferences = [];
+    if (applyPreferences && preferences) {
+      if (preferences.favoriteCuisines && preferences.favoriteCuisines.length > 0) {
+        softPreferences.push(`Preferred cuisines: ${preferences.favoriteCuisines.join(', ')}`);
+      }
+      if (preferences.goals && preferences.goals.length > 0) {
+        softPreferences.push(`Goals: ${preferences.goals.join(', ')}`);
+      }
+      if (preferences.preferredCookingTime) {
+        softPreferences.push(`Preferred cooking time: ${preferences.preferredCookingTime}`);
+      }
+      if (preferences.cookingSkill) {
+        softPreferences.push(`Cooking skill level: ${preferences.cookingSkill}`);
+      }
+      if (preferences.peopleCount) {
+        softPreferences.push(`Serves: ${preferences.peopleCount} people`);
+      }
+    }
+
+    // Build the prompt
+    let prompt = `Create a detailed recipe for "${dishName}".`;
+    
+    if (hardConstraints.length > 0) {
+      prompt += `\n\nCRITICAL REQUIREMENTS (MUST FOLLOW - These are safety and dietary restrictions):\n${hardConstraints.join('\n')}`;
+    }
+    
+    if (softPreferences.length > 0) {
+      prompt += `\n\nPREFERENCES (apply when relevant, but prioritize the dish "${dishName}" if they conflict):\n${softPreferences.join('\n')}`;
+      prompt += `\n\nIMPORTANT: If these preferences don't make sense for "${dishName}" (e.g., asking for "chocolate cake" but preferring "African food"), ignore the irrelevant preferences and create an authentic version of the dish. Only apply preferences that enhance the dish without changing its core identity.`;
+    }
+    
+    prompt += `\n\nRespond with ONLY a JSON object:
 
 {
   "name": "Recipe Name",
@@ -110,7 +157,14 @@ export async function generateRecipeWithGPT(dishName, analysis) {
   "servings": 4
 }
 
-Make it realistic and delicious. Include 6-10 ingredients and 4-8 clear steps.`,
+Make it realistic and delicious. Include 6-10 ingredients and 4-8 clear steps.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
         },
       ],
       max_tokens: 1500,
