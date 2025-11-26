@@ -33,6 +33,10 @@ import {
   Sparkles,
   Clock,
   TrendingUp,
+  Save,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -54,6 +58,9 @@ export default function FoodRecognitionScreen() {
   const [recognitionResult, setRecognitionResult] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [searchHistory, setSearchHistory] = useState([]);
+  const [savedRecipeId, setSavedRecipeId] = useState(null); // Track if recipe was saved
+  const [showRecipePreview, setShowRecipePreview] = useState(false); // Toggle recipe preview
+  const [isSavingRecipe, setIsSavingRecipe] = useState(false); // Track saving state
 
   // Animation refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -109,6 +116,8 @@ export default function FoodRecognitionScreen() {
     onSuccess: (data) => {
       if (data.success && data.data) {
         setRecognitionResult(data.data);
+        setSavedRecipeId(null); // Reset saved state for new result
+        setIsSavingRecipe(false);
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -164,6 +173,8 @@ export default function FoodRecognitionScreen() {
           generatedRecipe: recipe,
           similarRecipes: [],
         });
+        setSavedRecipeId(null); // Reset saved state for new result
+        setIsSavingRecipe(false);
 
         // Add to search history
         if (searchText.trim() && !searchHistory.includes(searchText.trim())) {
@@ -320,10 +331,83 @@ export default function FoodRecognitionScreen() {
     router.push(`/recipe-detail?id=${recipeId}`);
   };
 
+  // Save generated recipe mutation
+  const saveRecipeMutation = useMutation({
+    mutationFn: async (recipeData) => {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/recipes/save-generated`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(auth?.jwt && { "Authorization": `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...recipeData,
+          recognitionId: recognitionResult?.recognitionId,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Failed to save recipe");
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success && data.data) {
+        setSavedRecipeId(data.data.id);
+        setIsSavingRecipe(false);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        Alert.alert(
+          "Recipe Saved!",
+          "Your recipe has been saved successfully.",
+          [{ text: "OK" }]
+        );
+      }
+    },
+    onError: (error) => {
+      setIsSavingRecipe(false);
+      Alert.alert("Error", error.message || "Failed to save recipe");
+    },
+  });
+
+  const handleSaveRecipe = () => {
+    if (!recognitionResult?.generatedRecipe) return;
+    
+    setIsSavingRecipe(true);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    const recipe = recognitionResult.generatedRecipe;
+    saveRecipeMutation.mutate({
+      name: recipe.name,
+      description: recipe.description,
+      category: recipe.category,
+      cuisine: recipe.cuisine,
+      cooking_time: recipe.cooking_time,
+      prep_time: recipe.prep_time,
+      difficulty: recipe.difficulty,
+      servings: recipe.servings,
+      ingredients: recipe.ingredients,
+      instructions: recipe.instructions,
+      image_url: recipe.image_url || recipe._imageUrl,
+      nutrition: recipe.nutrition,
+      tags: recipe.tags || ["ai-generated", "image-recognized"],
+    });
+  };
+
   const resetToStart = () => {
     setSelectedImage(null);
     setRecognitionResult(null);
     setSearchText("");
+    setSavedRecipeId(null);
+    setIsSavingRecipe(false);
+    setShowRecipePreview(false);
   };
 
   const isLoading =
@@ -697,23 +781,164 @@ export default function FoodRecognitionScreen() {
                 )}
             </View>
 
-            {/* Generated Recipe Button */}
+            {/* Generated Recipe Actions */}
             {recognitionResult.generatedRecipe && (
-              <TouchableOpacity
-                style={styles.recipeButton}
-                onPress={() =>
-                  handleViewRecipe(recognitionResult.generatedRecipe.id)
-                }
-              >
-                <Text
-                  style={[
-                    styles.recipeButtonText,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
+              <View style={styles.recipeActionsContainer}>
+                {/* Preview Toggle Button */}
+                <TouchableOpacity
+                  style={styles.previewToggleButton}
+                  onPress={() => {
+                    setShowRecipePreview(!showRecipePreview);
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                  }}
                 >
-                  View Complete Recipe
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.previewToggleText,
+                      { fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
+                    {showRecipePreview ? "Hide" : "Preview"} Recipe
+                  </Text>
+                  {showRecipePreview ? (
+                    <ChevronUp size={18} color="#000000" />
+                  ) : (
+                    <ChevronDown size={18} color="#000000" />
+                  )}
+                </TouchableOpacity>
+
+                {/* Recipe Preview */}
+                {showRecipePreview && recognitionResult.generatedRecipe && (
+                  <View style={styles.recipePreviewCard}>
+                    {recognitionResult.generatedRecipe.description && (
+                      <Text
+                        style={[
+                          styles.previewDescription,
+                          { fontFamily: "Inter_400Regular" },
+                        ]}
+                      >
+                        {recognitionResult.generatedRecipe.description}
+                      </Text>
+                    )}
+                    
+                    {recognitionResult.generatedRecipe.ingredients && 
+                     Array.isArray(recognitionResult.generatedRecipe.ingredients) &&
+                     recognitionResult.generatedRecipe.ingredients.length > 0 && (
+                      <View style={styles.previewSection}>
+                        <Text
+                          style={[
+                            styles.previewSectionTitle,
+                            { fontFamily: "Inter_600SemiBold" },
+                          ]}
+                        >
+                          Ingredients
+                        </Text>
+                        {recognitionResult.generatedRecipe.ingredients.map((ing, idx) => (
+                          <Text
+                            key={idx}
+                            style={[
+                              styles.previewItem,
+                              { fontFamily: "Inter_400Regular" },
+                            ]}
+                          >
+                            • {typeof ing === 'string' ? ing : `${ing.amount || ''} ${ing.unit || ''} ${ing.name || ing.ingredient || ''}`.trim()}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+
+                    {recognitionResult.generatedRecipe.instructions && 
+                     Array.isArray(recognitionResult.generatedRecipe.instructions) &&
+                     recognitionResult.generatedRecipe.instructions.length > 0 && (
+                      <View style={styles.previewSection}>
+                        <Text
+                          style={[
+                            styles.previewSectionTitle,
+                            { fontFamily: "Inter_600SemiBold" },
+                          ]}
+                        >
+                          Instructions
+                        </Text>
+                        {recognitionResult.generatedRecipe.instructions.map((inst, idx) => (
+                          <View key={idx} style={styles.previewInstructionItem}>
+                            <Text
+                              style={[
+                                styles.previewStepNumber,
+                                { fontFamily: "Inter_600SemiBold" },
+                              ]}
+                            >
+                              {inst.step || idx + 1}.
+                            </Text>
+                            <Text
+                              style={[
+                                styles.previewInstructionText,
+                                { fontFamily: "Inter_400Regular" },
+                              ]}
+                            >
+                              {inst.instruction || inst}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Save Recipe Button */}
+                {!savedRecipeId ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.recipeButton,
+                      isSavingRecipe && styles.recipeButtonDisabled,
+                    ]}
+                    onPress={handleSaveRecipe}
+                    disabled={isSavingRecipe}
+                  >
+                    {isSavingRecipe ? (
+                      <>
+                        <Loader size={18} color="#FFFFFF" />
+                        <Text
+                          style={[
+                            styles.recipeButtonText,
+                            { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
+                          ]}
+                        >
+                          Saving...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={18} color="#FFFFFF" />
+                        <Text
+                          style={[
+                            styles.recipeButtonText,
+                            { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
+                          ]}
+                        >
+                          Save Recipe
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.recipeButton, styles.recipeButtonSaved]}
+                    onPress={() => handleViewRecipe(savedRecipeId)}
+                  >
+                    <Check size={18} color="#FFFFFF" />
+                    <Text
+                      style={[
+                        styles.recipeButtonText,
+                        { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
+                      ]}
+                    >
+                      View Saved Recipe
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
 
             {/* Similar Recipes */}
@@ -1092,12 +1317,77 @@ const styles = StyleSheet.create({
     color: "#666666",
     lineHeight: 20,
   },
+  recipeActionsContainer: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  previewToggleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    gap: 8,
+  },
+  previewToggleText: {
+    color: "#000000",
+    fontSize: 14,
+  },
+  recipePreviewCard: {
+    backgroundColor: "#FAFAFA",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    gap: 16,
+  },
+  previewDescription: {
+    fontSize: 14,
+    color: "#666666",
+    lineHeight: 20,
+  },
+  previewSection: {
+    gap: 8,
+  },
+  previewSectionTitle: {
+    fontSize: 15,
+    color: "#000000",
+    marginBottom: 8,
+  },
+  previewItem: {
+    fontSize: 13,
+    color: "#666666",
+    lineHeight: 20,
+    paddingLeft: 4,
+  },
+  previewInstructionItem: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  previewStepNumber: {
+    fontSize: 13,
+    color: "#000000",
+    minWidth: 24,
+  },
+  previewInstructionText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#666666",
+    lineHeight: 20,
+  },
   recipeButton: {
+    flexDirection: "row",
     backgroundColor: "#FF9F1C",
     borderRadius: 16,
     paddingVertical: 18,
+    paddingHorizontal: 24,
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "center",
     shadowColor: "#FF9F1C",
     shadowOffset: {
       width: 0,
@@ -1106,6 +1396,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  recipeButtonDisabled: {
+    opacity: 0.6,
+  },
+  recipeButtonSaved: {
+    backgroundColor: "#10B981",
+    shadowColor: "#10B981",
   },
   recipeButtonText: {
     color: "#FFFFFF",

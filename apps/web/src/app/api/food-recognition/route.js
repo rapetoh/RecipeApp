@@ -6,20 +6,45 @@ async function getUserPreferences(userId) {
   if (!userId) return null;
   
   try {
-    const userPrefs = await sql`
-      SELECT 
-        diet_type,
-        allergies,
-        dislikes,
-        preferred_cuisines,
-        goals,
-        cooking_skill,
-        preferred_cooking_time,
-        people_count,
-        apply_preferences_in_assistant
-      FROM users
-      WHERE id = ${userId}::uuid
+    // Check if apply_preferences_in_assistant column exists
+    const columnExists = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name = 'apply_preferences_in_assistant'
     `;
+    
+    const hasApplyPreferencesColumn = columnExists.length > 0;
+    
+    // Conditionally include apply_preferences_in_assistant if column exists
+    const userPrefs = hasApplyPreferencesColumn
+      ? await sql`
+          SELECT 
+            diet_type,
+            allergies,
+            dislikes,
+            preferred_cuisines,
+            goals,
+            cooking_skill,
+            preferred_cooking_time,
+            people_count,
+            apply_preferences_in_assistant
+          FROM users
+          WHERE id = ${userId}::uuid
+        `
+      : await sql`
+          SELECT 
+            diet_type,
+            allergies,
+            dislikes,
+            preferred_cuisines,
+            goals,
+            cooking_skill,
+            preferred_cooking_time,
+            people_count
+          FROM users
+          WHERE id = ${userId}::uuid
+        `;
     
     if (userPrefs.length === 0) return null;
     
@@ -35,7 +60,9 @@ async function getUserPreferences(userId) {
       cookingSkill: prefs.cooking_skill || "beginner",
       preferredCookingTime: prefs.preferred_cooking_time || "15_30",
       peopleCount: prefs.people_count || 1,
-      applyPreferencesInAssistant: prefs.apply_preferences_in_assistant !== false, // Default to true
+      applyPreferencesInAssistant: hasApplyPreferencesColumn 
+        ? (prefs.apply_preferences_in_assistant !== false) 
+        : true, // Default to true if column doesn't exist
     };
   } catch (error) {
     console.error("Error fetching user preferences:", error);
@@ -187,35 +214,26 @@ export async function POST(request) {
 
         console.log("Recipe Json:", recipeJson);
 
-        // Save the generated recipe to database
-        const savedRecipe = await sql`
-          INSERT INTO recipes (
-            name, description, category, cuisine, cooking_time, prep_time,
-            difficulty, servings, ingredients, instructions, nutrition,
-            tags, creator_type, estimated_cost, average_rating, rating_count, is_featured
-          ) VALUES (
-            ${recipeJson.name},
-            ${recipeJson.description},
-            ${analysisJson.category},
-            ${analysisJson.cuisine},
-            ${recipeJson.cooking_time || analysisJson.estimated_time || 30},
-            ${recipeJson.prep_time || 15},
-            ${analysisJson.difficulty},
-            ${recipeJson.servings || 4},
-            ${JSON.stringify(recipeJson.ingredients)},
-            ${JSON.stringify(recipeJson.instructions)},
-            ${JSON.stringify(recipeJson.nutrition || { calories: 300, protein: 15, carbs: 30, fat: 10 })},
-            ${JSON.stringify(["ai-generated", "image-recognized"])},
-            ${"ai"},
-            ${12.0},
-            ${4.2},
-            ${1},
-            ${false}
-          ) RETURNING *
-        `;
-
-        generatedRecipe = savedRecipe[0];
-        console.log("Generated and saved new recipe:", generatedRecipe.name);
+        // Don't save the recipe automatically - return it as data for user to optionally save
+        // Combine recipe data with analysis data for the response
+        generatedRecipe = {
+          ...recipeJson,
+          category: analysisJson.category,
+          cuisine: analysisJson.cuisine,
+          cooking_time: recipeJson.cooking_time || analysisJson.estimated_time || 30,
+          prep_time: recipeJson.prep_time || 15,
+          difficulty: analysisJson.difficulty,
+          servings: recipeJson.servings || 4,
+          nutrition: recipeJson.nutrition || { calories: 300, protein: 15, carbs: 30, fat: 10 },
+          tags: ["ai-generated", "image-recognized"],
+          creator_type: "ai",
+          image_url: imageUrl,
+          // Store original analysis for reference
+          _analysis: analysisJson,
+          _imageUrl: imageUrl,
+        };
+        
+        console.log("Generated recipe (not saved yet):", generatedRecipe.name);
       } catch (parseError) {
         console.error("Failed to parse or save generated recipe:", parseError);
         // Fall back to using similar recipe if available
@@ -228,7 +246,7 @@ export async function POST(request) {
       }
     }
 
-    // Save the recognition result
+    // Save the recognition result (without recipe ID since recipe isn't saved yet)
     const recognitionResult = await sql`
       INSERT INTO food_recognition_results (
         user_id, image_url, detected_dish_name, detected_ingredients,
@@ -237,9 +255,9 @@ export async function POST(request) {
         ${userId ? userId : null},
         ${imageUrl},
         ${analysisJson.dish_name},
-        ${JSON.stringify(analysisJson.detected_ingredients)},
+        ${analysisJson.detected_ingredients},
         ${analysisJson.confidence},
-        ${generatedRecipe?.id || null}
+        null
       ) RETURNING *
     `;
 

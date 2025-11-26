@@ -32,6 +32,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { RecipeActionButtons } from "./RecipeActionButtons";
+import { MealPlanModal } from "./MealPlanModal";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -45,6 +47,9 @@ export default function RecipeDetailScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [isFavorited, setIsFavorited] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showMealPlanModal, setShowMealPlanModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedMealType, setSelectedMealType] = useState(null);
 
   const flatListRef = useRef(null);
 
@@ -67,6 +72,33 @@ export default function RecipeDetailScreen() {
       }
       
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      
+      // First try user-recipes endpoint if authenticated (for user's own recipes)
+      if (auth?.jwt) {
+        try {
+          const userResponse = await fetch(
+            `${apiUrl}/api/user-recipes/${id}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${auth.jwt}`,
+              },
+              credentials: 'include',
+            }
+          );
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            if (userData.success) {
+              return userData;
+            }
+          }
+        } catch (userError) {
+          // Fall through to regular recipes endpoint
+          console.log('Not a user recipe, trying regular endpoint');
+        }
+      }
+      
+      // Fallback to regular recipes endpoint
       const response = await fetch(
         `${apiUrl}/api/recipes/${id}?userId=${auth?.user?.id || ""}`,
       );
@@ -165,23 +197,86 @@ export default function RecipeDetailScreen() {
     saveRecipeMutation.mutate(action);
   };
 
-  const handleStartCooking = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // Generate next 14 days for meal plan modal
+  const getNext14Days = () => {
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (let i = 0; i < 14; i++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + i);
+      days.push({
+        date: day.toISOString().split("T")[0],
+        day: day,
+      });
     }
+    return days;
+  };
 
+  // Add to meal plan mutation
+  const addToMealPlanMutation = useMutation({
+    mutationFn: async ({ date, mealType, recipeId }) => {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      console.log('Adding to meal plan:', { date, mealType, recipeId, userId: auth?.user?.id });
+      
+      const response = await fetch(`${apiUrl}/api/meal-plans`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: auth?.user?.id,
+          date,
+          mealType,
+          recipeId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Add meal plan error:', errorData);
+        throw new Error(errorData.error || "Failed to add meal to plan");
+      }
+
+      const result = await response.json();
+      console.log('Meal plan added successfully:', result);
+      return result;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries(["meal-plans"]);
+      setShowMealPlanModal(false);
+      setSelectedDate(null);
+      setSelectedMealType(null);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      // Navigate to meal planning with selected date
+      router.push(`/meal-planning?selectedDate=${variables.date}`);
+    },
+    onError: (error) => {
+      Alert.alert("Error", error.message || "Failed to add meal to plan");
+    },
+  });
+
+  const handleAddToMealPlan = () => {
     if (!isAuthenticated) {
-      Alert.alert("Sign In Required", "Please sign in to track your cooking", [
+      Alert.alert("Sign In Required", "Please sign in to add meals to plan", [
         { text: "Cancel", style: "cancel" },
         { text: "Sign In", onPress: () => signIn() },
       ]);
       return;
     }
+    setShowMealPlanModal(true);
+  };
 
-    // Navigate directly to cooking mode
-    router.push({
-      pathname: "/cooking-mode",
-      params: { id: id },
+  const handleMealPlanConfirm = ({ date, mealType }) => {
+    if (!id) {
+      Alert.alert("Error", "Recipe ID is missing");
+      return;
+    }
+    addToMealPlanMutation.mutate({
+      date,
+      mealType,
+      recipeId: parseInt(id),
     });
   };
 
@@ -287,9 +382,7 @@ export default function RecipeDetailScreen() {
   }
 
   const recipe = recipeData.data;
-  const carouselImages = recipe.image_url
-    ? [recipe.image_url]
-    : ["https://images.pexels.com/photos/5773960/pexels-photo-5773960.jpeg"];
+  const carouselImages = recipe.image_url ? [recipe.image_url] : [];
   const ingredients = recipe.ingredients || [];
   const instructions = recipe.instructions || [];
   const nutrition = recipe.nutrition || {};
@@ -341,20 +434,22 @@ export default function RecipeDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Carousel */}
-        <View style={styles.carouselContainer}>
-          <FlatList
-            ref={flatListRef}
-            data={carouselImages}
-            renderItem={renderCarouselItem}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.carouselContent}
-          />
-          {carouselImages.length > 1 && renderDotIndicator(carouselImages)}
-        </View>
+        {carouselImages.length > 0 && (
+          <View style={styles.carouselContainer}>
+            <FlatList
+              ref={flatListRef}
+              data={carouselImages}
+              renderItem={renderCarouselItem}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={onScroll}
+              scrollEventThrottle={16}
+              contentContainerStyle={styles.carouselContent}
+            />
+            {carouselImages.length > 1 && renderDotIndicator(carouselImages)}
+          </View>
+        )}
 
         {/* Recipe Card */}
         <View style={styles.recipeCard}>
@@ -379,14 +474,16 @@ export default function RecipeDetailScreen() {
 
           {/* Meta Row */}
           <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <Clock size={19} color="#6C6C6C" />
-              <Text
-                style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-              >
-                {recipe.cooking_time || 30} Mins
-              </Text>
-            </View>
+            {recipe.cooking_time && (
+              <View style={styles.metaItem}>
+                <Clock size={19} color="#6C6C6C" />
+                <Text
+                  style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
+                >
+                  {recipe.cooking_time} Mins
+                </Text>
+              </View>
+            )}
 
             <View style={styles.metaItem}>
               <Layers size={19} color="#6C6C6C" />
@@ -397,14 +494,16 @@ export default function RecipeDetailScreen() {
               </Text>
             </View>
 
-            <View style={styles.metaItem}>
-              <Users size={19} color="#6C6C6C" />
-              <Text
-                style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-              >
-                {recipe.servings || 4} Servings
-              </Text>
-            </View>
+            {recipe.servings && (
+              <View style={styles.metaItem}>
+                <Users size={19} color="#6C6C6C" />
+                <Text
+                  style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
+                >
+                  {recipe.servings} Servings
+                </Text>
+              </View>
+            )}
 
             <View style={styles.metaItem}>
               <Star size={19} color="#FF9F1C" fill="#FF9F1C" />
@@ -417,34 +516,41 @@ export default function RecipeDetailScreen() {
           </View>
 
           {/* Description */}
-          <Text
-            style={[styles.descriptionText, { fontFamily: "Inter_400Regular" }]}
-          >
-            {recipe.description ||
-              "A delicious and carefully crafted recipe that will delight your taste buds and bring joy to your dining experience."}
-          </Text>
+          {recipe.description && (
+            <Text
+              style={[styles.descriptionText, { fontFamily: "Inter_400Regular" }]}
+            >
+              {recipe.description}
+            </Text>
+          )}
 
           {/* Difficulty & Time */}
-          <View style={styles.difficultyRow}>
-            <View style={styles.difficultyItem}>
-              <ChefHat size={16} color="#666666" />
-              <Text
-                style={[
-                  styles.difficultyText,
-                  { fontFamily: "Inter_400Regular" },
-                ]}
-              >
-                {recipe.difficulty || "Medium"} difficulty
-              </Text>
+          {(recipe.difficulty || recipe.prep_time) && (
+            <View style={styles.difficultyRow}>
+              {recipe.difficulty && (
+                <View style={styles.difficultyItem}>
+                  <ChefHat size={16} color="#666666" />
+                  <Text
+                    style={[
+                      styles.difficultyText,
+                      { fontFamily: "Inter_400Regular" },
+                    ]}
+                  >
+                    {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)} difficulty
+                  </Text>
+                </View>
+              )}
+              {recipe.prep_time && (
+                <View style={styles.difficultyItem}>
+                  <Text
+                    style={[styles.prepText, { fontFamily: "Inter_400Regular" }]}
+                  >
+                    Prep: {recipe.prep_time} mins
+                  </Text>
+                </View>
+              )}
             </View>
-            <View style={styles.difficultyItem}>
-              <Text
-                style={[styles.prepText, { fontFamily: "Inter_400Regular" }]}
-              >
-                Prep: {recipe.prep_time || 15} mins
-              </Text>
-            </View>
-          </View>
+          )}
 
           {/* Nutrition Info */}
           {nutrition.calories && (
@@ -525,22 +631,43 @@ export default function RecipeDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom CTA */}
-      <View
-        style={[styles.ctaContainer, { paddingBottom: insets.bottom + 16 }]}
-      >
-        <TouchableOpacity
-          style={styles.ctaButton}
-          onPress={handleStartCooking}
-          accessibilityLabel="Start cooking this recipe"
-          accessibilityRole="button"
-        >
-          <Text
-            style={[styles.ctaButtonText, { fontFamily: "Inter_600SemiBold" }]}
-          >
-            Start Cooking
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <RecipeActionButtons
+        recipeId={id}
+        isAuthenticated={isAuthenticated}
+        signIn={signIn}
+        onAddToMealPlan={handleAddToMealPlan}
+        insets={insets}
+        fontFamily={{
+          regular: "Inter_400Regular",
+          medium: "Inter_500Medium",
+          semiBold: "Inter_600SemiBold",
+          bold: "Inter_700Bold",
+        }}
+      />
+
+      {/* Meal Plan Modal */}
+      <MealPlanModal
+        visible={showMealPlanModal}
+        onClose={() => {
+          setShowMealPlanModal(false);
+          setSelectedDate(null);
+          setSelectedMealType(null);
+        }}
+        recipeName={recipe?.name || ""}
+        selectedDate={selectedDate}
+        selectedMealType={selectedMealType}
+        onDateSelect={setSelectedDate}
+        onMealTypeSelect={setSelectedMealType}
+        onConfirm={handleMealPlanConfirm}
+        isLoading={addToMealPlanMutation.isLoading}
+        nextDays={getNext14Days()}
+        fontFamily={{
+          regular: "Inter_400Regular",
+          medium: "Inter_500Medium",
+          semiBold: "Inter_600SemiBold",
+          bold: "Inter_700Bold",
+        }}
+      />
     </View>
   );
 }

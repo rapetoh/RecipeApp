@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -27,11 +27,13 @@ import {
   Moon,
   CheckCircle,
   Clock,
+  MoreVertical,
 } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
+import { RecipeSelectionModal } from "./RecipeSelectionModal";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -39,8 +41,24 @@ export default function MealPlanningScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const params = useLocalSearchParams();
   const { auth, isAuthenticated, signIn } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  
+  // Handle date from URL params (from calendar navigation)
+  const getInitialDate = () => {
+    if (params.selectedDate) {
+      const date = new Date(params.selectedDate);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+    return new Date();
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getInitialDate());
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [selectedMealType, setSelectedMealType] = useState(null);
+  const [selectedDateForMeal, setSelectedDateForMeal] = useState(null);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -49,37 +67,54 @@ export default function MealPlanningScreen() {
     Inter_700Bold,
   });
 
-  // Generate week dates
-  const getWeekDates = (date) => {
-    const startOfWeek = new Date(date);
-    startOfWeek.setDate(date.getDate() - date.getDay());
-
-    const week = [];
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(startOfWeek);
-      day.setDate(startOfWeek.getDate() + i);
-      week.push(day);
+  // Generate next 14 days starting from today
+  const getNext14Days = () => {
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (let i = 0; i < 14; i++) {
+      const day = new Date(today);
+      day.setDate(today.getDate() + i);
+      days.push({
+        date: day.toISOString().split("T")[0],
+        day: day,
+      });
     }
-    return week;
+    return days;
   };
 
-  const weekDates = getWeekDates(selectedDate);
+  const next14Days = getNext14Days();
+  
+  // Update selectedDate if it's not in the 14-day range
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(today.getDate() + 13);
+    
+    if (selectedDate < today || selectedDate > maxDate) {
+      setSelectedDate(today);
+    }
+  }, []);
 
-  // Fetch meal plans for the week
+  // Fetch meal plans for the next 14 days
   const { data: mealPlans, isLoading } = useQuery({
     queryKey: [
       "meal-plans",
       auth?.user?.id,
-      selectedDate.toISOString().split("T")[0],
+      next14Days[0]?.date,
+      next14Days[13]?.date,
     ],
     queryFn: async () => {
       if (!auth?.user?.id) return { data: [] };
 
-      const startDate = weekDates[0].toISOString().split("T")[0];
-      const endDate = weekDates[6].toISOString().split("T")[0];
+      const startDate = next14Days[0].date;
+      const endDate = next14Days[13].date;
 
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const response = await fetch(
-        `/api/meal-plans?userId=${auth.user.id}&startDate=${startDate}&endDate=${endDate}`,
+        `${apiUrl}/api/meal-plans?userId=${auth.user.id}&startDate=${startDate}&endDate=${endDate}`,
       );
 
       if (!response.ok) {
@@ -96,6 +131,8 @@ export default function MealPlanningScreen() {
   const addMealMutation = useMutation({
     mutationFn: async ({ date, mealType, recipeId }) => {
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      console.log('Adding meal from meal planning:', { date, mealType, recipeId, userId: auth?.user?.id });
+      
       const response = await fetch(`${apiUrl}/api/meal-plans`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,13 +145,20 @@ export default function MealPlanningScreen() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to add meal");
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Add meal error:', errorData);
+        throw new Error(errorData.error || "Failed to add meal");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('Meal added successfully:', result);
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["meal-plans"]);
+      setShowRecipeModal(false);
+      setSelectedDateForMeal(null);
+      setSelectedMealType(null);
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -124,11 +168,43 @@ export default function MealPlanningScreen() {
     },
   });
 
+  // Remove meal mutation
+  const removeMealMutation = useMutation({
+    mutationFn: async ({ date, mealType }) => {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      console.log('Removing meal:', { date, mealType, userId: auth?.user?.id });
+      
+      const response = await fetch(
+        `${apiUrl}/api/meal-plans?userId=${auth?.user?.id}&date=${date}&mealType=${mealType}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Remove meal error:', errorData);
+        throw new Error(errorData.error || "Failed to remove meal");
+      }
+
+      const result = await response.json();
+      console.log('Meal removed successfully:', result);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["meal-plans"]);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    },
+    onError: () => {
+      Alert.alert("Error", "Failed to remove meal from plan");
+    },
+  });
+
   // Generate grocery list mutation
   const generateGroceryListMutation = useMutation({
     mutationFn: async () => {
-      const startDate = weekDates[0].toISOString().split("T")[0];
-      const endDate = weekDates[6].toISOString().split("T")[0];
+      const startDate = next14Days[0].date;
+      const endDate = next14Days[13].date;
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const response = await fetch(`${apiUrl}/api/grocery-lists`, {
@@ -138,7 +214,7 @@ export default function MealPlanningScreen() {
           userId: auth?.user?.id,
           startDate,
           endDate,
-          name: `Grocery List - Week of ${weekDates[0].toLocaleDateString()}`,
+          name: `Grocery List - ${next14Days[0].day.toLocaleDateString()} to ${next14Days[13].day.toLocaleDateString()}`,
         }),
       });
 
@@ -191,7 +267,37 @@ export default function MealPlanningScreen() {
       return;
     }
 
-    router.push(`/(tabs)/search?planDate=${date}&mealType=${mealType}`);
+    setSelectedDateForMeal(date);
+    setSelectedMealType(mealType);
+    setShowRecipeModal(true);
+  };
+
+  const handleRecipeSelect = (recipe) => {
+    addMealMutation.mutate({
+      date: selectedDateForMeal,
+      mealType: selectedMealType,
+      recipeId: recipe.id,
+    });
+  };
+
+  const handleRemoveMeal = (date, mealType) => {
+    Alert.alert(
+      "Remove Meal",
+      "Are you sure you want to remove this meal from your plan?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            removeMealMutation.mutate({
+              date: date.toISOString().split("T")[0],
+              mealType,
+            });
+          },
+        },
+      ]
+    );
   };
 
   const handleGenerateGroceryList = () => {
@@ -279,7 +385,15 @@ export default function MealPlanningScreen() {
         <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
           Meal Planning
         </Text>
-        <View style={styles.placeholder} />
+        {isAuthenticated && (
+          <TouchableOpacity
+            style={styles.calendarButton}
+            onPress={() => router.push("/meal-calendar")}
+          >
+            <Calendar size={20} color="#FF9F1C" />
+          </TouchableOpacity>
+        )}
+        {!isAuthenticated && <View style={styles.placeholder} />}
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -305,22 +419,21 @@ export default function MealPlanningScreen() {
           </View>
         )}
 
-        {/* Week Navigation */}
+        {/* 14-Day Navigation */}
         <View style={styles.weekContainer}>
           <Text style={[styles.weekTitle, { fontFamily: "Inter_700Bold" }]}>
-            Week of{" "}
-            {weekDates[0].toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-            })}
+            Next 14 Days
           </Text>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.daysScroll}
+            contentContainerStyle={styles.daysScrollContent}
           >
-            {weekDates.map((date, index) => (
+            {next14Days.map((dayObj, index) => {
+              const date = dayObj.day;
+              return (
               <TouchableOpacity
                 key={index}
                 style={[
@@ -354,7 +467,8 @@ export default function MealPlanningScreen() {
                   {date.getDate()}
                 </Text>
               </TouchableOpacity>
-            ))}
+            );
+            })}
           </ScrollView>
         </View>
 
@@ -398,7 +512,15 @@ export default function MealPlanningScreen() {
                 </View>
 
                 {meal ? (
-                  <View style={styles.plannedMeal}>
+                  <TouchableOpacity
+                    style={styles.plannedMeal}
+                    onPress={() =>
+                      router.push(`/recipe-detail?id=${meal.recipe_id}`)
+                    }
+                    onLongPress={() =>
+                      handleRemoveMeal(selectedDate, mealType)
+                    }
+                  >
                     <View style={styles.mealInfo}>
                       <Text
                         style={[
@@ -417,8 +539,16 @@ export default function MealPlanningScreen() {
                         {meal.cooking_time} mins • {meal.cuisine}
                       </Text>
                     </View>
-                    <CheckCircle size={20} color="#4CAF50" />
-                  </View>
+                    <View style={styles.mealActions}>
+                      <CheckCircle size={20} color="#4CAF50" />
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => handleRemoveMeal(selectedDate, mealType)}
+                      >
+                        <MoreVertical size={18} color="#666666" />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
                 ) : (
                   <View style={styles.emptyMeal}>
                     <Text
@@ -447,7 +577,7 @@ export default function MealPlanningScreen() {
 
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push("/(tabs)/search?quickAdd=true")}
+              onPress={() => router.push("/(tabs)/search")}
             >
               <Text
                 style={[
@@ -475,6 +605,28 @@ export default function MealPlanningScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Recipe Selection Modal */}
+      {isAuthenticated && (
+        <RecipeSelectionModal
+          visible={showRecipeModal}
+          onClose={() => {
+            setShowRecipeModal(false);
+            setSelectedDateForMeal(null);
+            setSelectedMealType(null);
+          }}
+          selectedDate={selectedDateForMeal}
+          selectedMealType={selectedMealType}
+          onSelectRecipe={handleRecipeSelect}
+          fontFamily={{
+            regular: "Inter_400Regular",
+            medium: "Inter_500Medium",
+            semiBold: "Inter_600SemiBold",
+            bold: "Inter_700Bold",
+          }}
+          isAuthenticated={isAuthenticated}
+        />
+      )}
     </View>
   );
 }
@@ -507,6 +659,14 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 38,
+  },
+  calendarButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFF4E6",
+    justifyContent: "center",
+    alignItems: "center",
   },
   content: {
     flex: 1,
@@ -554,6 +714,8 @@ const styles = StyleSheet.create({
   },
   daysScroll: {
     marginHorizontal: -16,
+  },
+  daysScrollContent: {
     paddingHorizontal: 16,
   },
   dayItem: {
@@ -639,6 +801,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
     padding: 12,
+  },
+  mealActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  removeButton: {
+    padding: 4,
   },
   mealInfo: {
     flex: 1,

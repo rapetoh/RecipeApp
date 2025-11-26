@@ -79,6 +79,9 @@ export default function ProfileScreen() {
 
     // Handle different actions
     switch (action) {
+      case "my-recipes":
+        router.push("/my-recipes");
+        break;
       case "saved":
         router.push("/(tabs)/save");
         break;
@@ -104,6 +107,14 @@ export default function ProfileScreen() {
   }
 
   const menuItems = [
+    {
+      id: "my-recipes",
+      title: "My Recipes",
+      subtitle: "Create and manage your recipes",
+      icon: ChefHat,
+      color: "#FF9F1C",
+      requiresAuth: true,
+    },
     {
       id: "saved",
       title: "Saved Recipes",

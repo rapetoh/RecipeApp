@@ -41,6 +41,19 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="account/signin" />
           <Stack.Screen name="account/signup" />
+          {/* Explicitly register routes to ensure they're recognized */}
+          <Stack.Screen name="my-recipes" />
+          <Stack.Screen name="recipe-form" />
+          <Stack.Screen name="recipe-detail" />
+          <Stack.Screen name="food-recognition" />
+          <Stack.Screen name="meal-planning" />
+          <Stack.Screen name="preferences" />
+          <Stack.Screen name="cooking-mode" />
+          <Stack.Screen name="onboarding-cooking" />
+          <Stack.Screen name="onboarding-cuisines" />
+          <Stack.Screen name="onboarding-diet" />
+          <Stack.Screen name="onboarding-goals" />
+          <Stack.Screen name="onboarding-notifications" />
         </Stack>
       </GestureHandlerRootView>
     </QueryClientProvider>

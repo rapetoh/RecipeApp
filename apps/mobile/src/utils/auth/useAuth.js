@@ -35,7 +35,7 @@ export const useAuth = () => {
 
   return {
     isReady,
-    isAuthenticated: isReady ? !!auth : null,
+    isAuthenticated: isReady ? !!(auth && auth.jwt) : null,
     signIn,
     signOut,
     signUp,
