@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ import {
   Clock,
   MoreVertical,
 } from "lucide-react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
@@ -47,7 +47,9 @@ export default function MealPlanningScreen() {
   // Handle date from URL params (from calendar navigation)
   const getInitialDate = () => {
     if (params.selectedDate) {
-      const date = new Date(params.selectedDate);
+      // Parse date in local timezone to avoid timezone offset issues
+      const [year, month, day] = params.selectedDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       if (!isNaN(date.getTime())) {
         return date;
       }
@@ -59,6 +61,79 @@ export default function MealPlanningScreen() {
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState(null);
   const [selectedDateForMeal, setSelectedDateForMeal] = useState(null);
+  const daysScrollViewRef = useRef(null);
+
+  // Debug: Log when component mounts and state changes
+  useEffect(() => {
+    console.log('📱 MealPlanning state:', {
+      userId: auth?.user?.id,
+      isAuthenticated,
+      showRecipeModal,
+      selectedDateForMeal,
+      selectedMealType
+    });
+  }, [auth?.user?.id, isAuthenticated, showRecipeModal, selectedDateForMeal, selectedMealType]);
+
+  // Update selectedDate when URL params change (from calendar navigation)
+  useEffect(() => {
+    if (params.selectedDate) {
+      // Parse date in local timezone to avoid timezone offset issues
+      const [year, month, day] = params.selectedDate.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      if (!isNaN(date.getTime())) {
+        console.log('📅 Updating selectedDate from URL params:', params.selectedDate);
+        setSelectedDate(date);
+        
+        // Scroll to the selected date in the horizontal strip
+        setTimeout(() => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          date.setHours(0, 0, 0, 0);
+          
+          const daysDiff = Math.floor((date - today) / (1000 * 60 * 60 * 24));
+          
+          // Only scroll if date is within the 14-day range
+          if (daysDiff >= 0 && daysDiff < 14 && daysScrollViewRef.current) {
+            const scrollPosition = daysDiff * 80; // 80 is approximate day item width + margin
+            daysScrollViewRef.current.scrollTo({ x: scrollPosition, animated: true });
+          }
+        }, 100);
+      }
+    }
+  }, [params.selectedDate]);
+
+  // Listen for date selection from calendar (when backing from calendar)
+  // useFocusEffect runs every time the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const selectedDateStr = queryClient.getQueryData(['selectedDateFromCalendar']);
+      if (selectedDateStr) {
+        console.log('📅 Received date from calendar:', selectedDateStr);
+        const [year, month, day] = selectedDateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        if (!isNaN(date.getTime())) {
+          setSelectedDate(date);
+          
+          // Scroll to the selected date
+          setTimeout(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            date.setHours(0, 0, 0, 0);
+            
+            const daysDiff = Math.floor((date - today) / (1000 * 60 * 60 * 24));
+            
+            if (daysDiff >= 0 && daysDiff < 14 && daysScrollViewRef.current) {
+              const scrollPosition = daysDiff * 80;
+              daysScrollViewRef.current.scrollTo({ x: scrollPosition, animated: true });
+            }
+          }, 100);
+        }
+        
+        // Clear the stored date
+        queryClient.setQueryData(['selectedDateFromCalendar'], null);
+      }
+    }, [queryClient, daysScrollViewRef])
+  );
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -99,7 +174,7 @@ export default function MealPlanningScreen() {
   }, []);
 
   // Fetch meal plans for the next 14 days
-  const { data: mealPlans, isLoading } = useQuery({
+  const { data: mealPlans, isLoading, refetch } = useQuery({
     queryKey: [
       "meal-plans",
       auth?.user?.id,
@@ -113,6 +188,8 @@ export default function MealPlanningScreen() {
       const endDate = next14Days[13].date;
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      console.log('🔄 Fetching meal plans for date range:', { startDate, endDate, userId: auth.user.id });
+      
       const response = await fetch(
         `${apiUrl}/api/meal-plans?userId=${auth.user.id}&startDate=${startDate}&endDate=${endDate}`,
       );
@@ -121,10 +198,13 @@ export default function MealPlanningScreen() {
         throw new Error("Failed to fetch meal plans");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('📥 Fetched meal plans:', result);
+      return result;
     },
     enabled: !!auth?.user?.id && isAuthenticated,
-    staleTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 0, // Always refetch to get latest data
+    refetchOnMount: true, // Refetch when component mounts
   });
 
   // Add meal mutation
@@ -155,7 +235,9 @@ export default function MealPlanningScreen() {
       return result;
     },
     onSuccess: () => {
+      console.log('✅ Meal added, refreshing meal plans...');
       queryClient.invalidateQueries(["meal-plans"]);
+      refetch(); // Force immediate refetch
       setShowRecipeModal(false);
       setSelectedDateForMeal(null);
       setSelectedMealType(null);
@@ -273,6 +355,37 @@ export default function MealPlanningScreen() {
   };
 
   const handleRecipeSelect = (recipe) => {
+    console.log('🎯 handleRecipeSelect called with recipe:', recipe.id, recipe.name);
+    console.log('📅 Selected date and meal type:', { 
+      date: selectedDateForMeal, 
+      mealType: selectedMealType 
+    });
+    console.log('🔐 Auth state:', { 
+      userId: auth?.user?.id, 
+      isAuthenticated 
+    });
+    
+    if (!auth?.user?.id) {
+      console.error('❌ User ID is missing!');
+      Alert.alert("Error", "You must be signed in to add meals");
+      return;
+    }
+    
+    if (!selectedDateForMeal || !selectedMealType) {
+      console.error('❌ Date or meal type is missing!', { 
+        date: selectedDateForMeal, 
+        mealType: selectedMealType 
+      });
+      Alert.alert("Error", "Please select both date and meal type");
+      return;
+    }
+    
+    console.log('✅ Calling mutation with:', {
+      date: selectedDateForMeal,
+      mealType: selectedMealType,
+      recipeId: recipe.id,
+    });
+    
     addMealMutation.mutate({
       date: selectedDateForMeal,
       mealType: selectedMealType,
@@ -338,9 +451,39 @@ export default function MealPlanningScreen() {
     if (!mealPlans?.data) return null;
 
     const dateStr = date.toISOString().split("T")[0];
-    return mealPlans.data.find(
-      (plan) => plan.date === dateStr && plan.meal_type === mealType,
-    );
+    console.log('🔍 Looking for meal:', { dateStr, mealType });
+    console.log('📋 Available meals:', mealPlans.data.map(p => ({
+      date: p.date,
+      dateOnly: p.date.split("T")[0],
+      meal_type: p.meal_type,
+      recipe_name: p.recipe_name
+    })));
+    
+    return mealPlans.data.find((plan) => {
+      const planDateStr = plan.date.split("T")[0]; // Extract date part from ISO string
+      const matches = planDateStr === dateStr && plan.meal_type === mealType;
+      if (matches) {
+        console.log('✅ Found matching meal:', plan);
+      }
+      return matches;
+    });
+  };
+
+  // Check if a day has all meals planned (breakfast, lunch, dinner)
+  const isDayFullyPlanned = (date) => {
+    if (!mealPlans?.data) return false;
+    
+    const dateStr = date.toISOString().split("T")[0];
+    const mealsForDay = mealPlans.data.filter((plan) => {
+      const planDateStr = plan.date.split("T")[0];
+      return planDateStr === dateStr;
+    });
+    
+    // Check if we have all 3 meal types
+    const mealTypes = mealsForDay.map(m => m.meal_type);
+    return mealTypes.includes('breakfast') && 
+           mealTypes.includes('lunch') && 
+           mealTypes.includes('dinner');
   };
 
   const getMealIcon = (mealType) => {
@@ -388,7 +531,7 @@ export default function MealPlanningScreen() {
         {isAuthenticated && (
           <TouchableOpacity
             style={styles.calendarButton}
-            onPress={() => router.push("/meal-calendar")}
+            onPress={() => router.push("/meal-calendar?returnTo=meal-planning")}
           >
             <Calendar size={20} color="#FF9F1C" />
           </TouchableOpacity>
@@ -426,6 +569,7 @@ export default function MealPlanningScreen() {
           </Text>
 
           <ScrollView
+            ref={daysScrollViewRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.daysScroll}
@@ -433,6 +577,8 @@ export default function MealPlanningScreen() {
           >
             {next14Days.map((dayObj, index) => {
               const date = dayObj.day;
+              const isFullyPlanned = isDayFullyPlanned(date);
+              
               return (
               <TouchableOpacity
                 key={index}
@@ -441,9 +587,16 @@ export default function MealPlanningScreen() {
                   isToday(date) && styles.dayItemToday,
                   selectedDate.toDateString() === date.toDateString() &&
                     styles.dayItemSelected,
+                  isFullyPlanned && styles.dayItemComplete,
                 ]}
                 onPress={() => handleDateSelect(date)}
               >
+                {/* Checkmark badge for fully planned days */}
+                {isFullyPlanned && (
+                  <View style={styles.completeBadge}>
+                    <CheckCircle size={14} color="#4CAF50" />
+                  </View>
+                )}
                 <Text
                   style={[
                     styles.dayText,
@@ -755,6 +908,18 @@ const styles = StyleSheet.create({
   },
   dayNumberSelected: {
     color: "#FFFFFF",
+  },
+  dayItemComplete: {
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+  },
+  completeBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 2,
   },
   daySection: {
     paddingHorizontal: 16,

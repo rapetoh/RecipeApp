@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -104,12 +105,13 @@ export default function HomeScreen() {
 
   // Fetch recipes based on category
   const { data: recipesData, isLoading: recipesLoading } = useQuery({
-    queryKey: ["recipes", activeCategory],
+    queryKey: ["recipes", activeCategory, auth?.user?.id],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: "20",
         ...(activeCategory !== "all" && { category: activeCategory }),
         ...(auth?.user?.id && { userId: auth.user.id }), // Include user ID for saved status
+        ...(auth?.user?.id && { creatorUserId: auth.user.id }), // Only show user's own recipes
       });
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
@@ -442,6 +444,21 @@ export default function HomeScreen() {
                   ]}
                   onPress={() => handleRecipePress(recipe)}
                 >
+                  {/* Recipe Image */}
+                  {recipe.image_url ? (
+                    <Image
+                      source={{ uri: recipe.image_url }}
+                      style={styles.recipeImage}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={styles.recipeImagePlaceholder}>
+                      <Text style={styles.placeholderEmoji}>🍽️</Text>
+                    </View>
+                  )}
+                  
+                  {/* Recipe Content */}
                   <View style={styles.recipeCardContent}>
                     <Text
                       style={[
@@ -712,13 +729,34 @@ const styles = StyleSheet.create({
   },
   recipeCard: {
     width: cardWidth,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  recipeImage: {
+    width: "100%",
+    height: 140,
+    backgroundColor: "#F8F9FA",
+  },
+  recipeImagePlaceholder: {
+    width: "100%",
+    height: 140,
+    backgroundColor: "#F8F9FA",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderEmoji: {
+    fontSize: 48,
+    opacity: 0.3,
   },
   recipeCardContent: {
-    // Content styling
+    padding: 12,
   },
   recipeTitle: {
     fontSize: 16,

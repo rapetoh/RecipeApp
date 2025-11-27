@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -52,6 +52,16 @@ export default function RecipeDetailScreen() {
   const [selectedMealType, setSelectedMealType] = useState(null);
 
   const flatListRef = useRef(null);
+
+  // Debug: Log when component mounts and auth changes
+  useEffect(() => {
+    console.log('📱 RecipeDetail mounted/updated:', {
+      recipeId: id,
+      userId: auth?.user?.id,
+      isAuthenticated,
+      showModal: showMealPlanModal
+    });
+  }, [id, auth?.user?.id, isAuthenticated, showMealPlanModal]);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -269,10 +279,31 @@ export default function RecipeDetailScreen() {
   };
 
   const handleMealPlanConfirm = ({ date, mealType }) => {
+    console.log('🎯 handleMealPlanConfirm called with:', { date, mealType, id });
+    console.log('🔐 Auth state:', { 
+      userId: auth?.user?.id, 
+      isAuthenticated, 
+      hasAuth: !!auth 
+    });
+    
     if (!id) {
+      console.error('❌ Recipe ID is missing!');
       Alert.alert("Error", "Recipe ID is missing");
       return;
     }
+    
+    if (!auth?.user?.id) {
+      console.error('❌ User ID is missing!');
+      Alert.alert("Error", "You must be signed in to add meals");
+      return;
+    }
+    
+    console.log('✅ Calling mutation with:', {
+      date,
+      mealType,
+      recipeId: parseInt(id),
+    });
+    
     addToMealPlanMutation.mutate({
       date,
       mealType,
@@ -659,7 +690,7 @@ export default function RecipeDetailScreen() {
         onDateSelect={setSelectedDate}
         onMealTypeSelect={setSelectedMealType}
         onConfirm={handleMealPlanConfirm}
-        isLoading={addToMealPlanMutation.isLoading}
+        isLoading={addToMealPlanMutation.isPending}
         nextDays={getNext14Days()}
         fontFamily={{
           regular: "Inter_400Regular",

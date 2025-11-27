@@ -148,7 +148,7 @@ export async function POST(request) {
       analysisJson.cuisine = analysisJson.cuisine || "Global";
       analysisJson.difficulty = analysisJson.difficulty || "medium";
       analysisJson.estimated_time = analysisJson.estimated_time || 30;
-      analysisJson.category = analysisJson.category || "main";
+      analysisJson.category = analysisJson.category || "dinner";
     } catch (parseError) {
       console.error("Failed to analyze image:", parseError);
       return Response.json(

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from "react-native";
+import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -16,7 +18,7 @@ import {
   Inter_500Medium,
   Inter_600SemiBold,
 } from "@expo-google-fonts/inter";
-import { Heart, ChefHat } from "lucide-react-native";
+import { Heart, ChefHat, Search } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
@@ -26,6 +28,7 @@ export default function SavedRecipesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isAuthenticated, signIn, auth } = useAuth();
+  const [searchText, setSearchText] = useState("");
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -40,14 +43,15 @@ export default function SavedRecipesScreen() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["saved-recipes", auth?.user?.id],
+    queryKey: ["saved-recipes", auth?.user?.id, searchText],
     queryFn: async () => {
       if (!auth?.user?.id) {
         throw new Error("User not authenticated");
       }
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const response = await fetch(`${apiUrl}/api/saved-recipes?userId=${auth.user.id}`);
+      const searchParam = searchText ? `&search=${encodeURIComponent(searchText)}` : "";
+      const response = await fetch(`${apiUrl}/api/saved-recipes?userId=${auth.user.id}${searchParam}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -95,37 +99,57 @@ export default function SavedRecipesScreen() {
     return null;
   }
 
+  const savedRecipes = savedRecipesData?.data || [];
+
   const renderRecipeItem = ({ item: recipe }) => {
     return (
       <TouchableOpacity
         style={styles.recipeItem}
         onPress={() => handleRecipePress(recipe)}
       >
-        <View style={styles.recipeContent}>
-          <View style={styles.recipeHeader}>
-            <Text
-              style={[styles.recipeTitle, { fontFamily: "Inter_600SemiBold" }]}
-              numberOfLines={2}
-            >
-              {recipe.name}
-            </Text>
-            <Heart size={20} color="#FF9F1C" fill="#FF9F1C" />
+        {/* Recipe Image */}
+        <View style={styles.recipeImageContainer}>
+          {recipe.image_url ? (
+            <Image
+              source={{ uri: recipe.image_url }}
+              style={styles.recipeImage}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <View style={styles.placeholderImage}>
+              <ChefHat size={32} color="#CCCCCC" />
+            </View>
+          )}
+          <View style={styles.favoriteBadge}>
+            <Heart size={16} color="#FFFFFF" fill="#FFFFFF" />
           </View>
+        </View>
 
+        {/* Recipe Content */}
+        <View style={styles.recipeContent}>
           <Text
-            style={[
-              styles.recipeDescription,
-              { fontFamily: "Inter_400Regular" },
-            ]}
+            style={[styles.recipeTitle, { fontFamily: "Inter_600SemiBold" }]}
             numberOfLines={2}
           >
-            {recipe.description || "A delicious recipe you saved for later!"}
+            {recipe.name}
           </Text>
+
+          {recipe.description && (
+            <Text
+              style={[
+                styles.recipeDescription,
+                { fontFamily: "Inter_400Regular" },
+              ]}
+              numberOfLines={2}
+            >
+              {recipe.description}
+            </Text>
+          )}
 
           <View style={styles.recipeMeta}>
             <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
-              {recipe.cooking_time || 30} mins • {recipe.cuisine || "Global"} •{" "}
-              {recipe.difficulty || "Easy"}
+              {recipe.cooking_time || 30} mins • {recipe.cuisine || "Global"}
             </Text>
             <Text style={[styles.rating, { fontFamily: "Inter_500Medium" }]}>
               ⭐ {recipe.average_rating || 0}
@@ -153,6 +177,22 @@ export default function SavedRecipesScreen() {
           Saved Recipes
         </Text>
       </View>
+
+      {/* Search Bar */}
+      {isAuthenticated && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Search size={20} color="#999999" style={{ marginRight: 12 }} />
+            <TextInput
+              style={[styles.searchInput, { fontFamily: "Inter_400Regular" }]}
+              placeholder="Search saved recipes..."
+              placeholderTextColor="#999999"
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+          </View>
+        </View>
+      )}
 
       {/* Content */}
       <View style={styles.content}>
@@ -243,19 +283,37 @@ export default function SavedRecipesScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        ) : savedRecipes.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Search size={48} color="#999999" />
+            <Text
+              style={[styles.emptyTitle, { fontFamily: "Inter_600SemiBold" }]}
+            >
+              {searchText ? "No Results Found" : "No Saved Recipes"}
+            </Text>
+            <Text
+              style={[styles.emptyText, { fontFamily: "Inter_400Regular" }]}
+            >
+              {searchText 
+                ? `No saved recipes match your search "${searchText}"`
+                : "Save recipes to see them here"
+              }
+            </Text>
+          </View>
         ) : (
           <>
             <View style={styles.statsHeader}>
               <Text
                 style={[styles.statsText, { fontFamily: "Inter_500Medium" }]}
               >
-                {savedRecipesData.data.length} saved recipe
-                {savedRecipesData.data.length !== 1 ? "s" : ""}
+                {savedRecipes.length} saved recipe
+                {savedRecipes.length !== 1 ? "s" : ""}
+                {searchText && ` (filtered)`}
               </Text>
             </View>
 
             <FlatList
-              data={savedRecipesData.data}
+              data={savedRecipes}
               renderItem={renderRecipeItem}
               keyExtractor={(item, index) => `saved-recipe-${item.id}-${index}`}
               showsVerticalScrollIndicator={false}
@@ -285,6 +343,24 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: "#000000",
     textAlign: "center",
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
+  },
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#000000",
   },
   content: {
     flex: 1,
@@ -397,30 +473,58 @@ const styles = StyleSheet.create({
     color: "#666666",
   },
   recipeItem: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  recipeImageContainer: {
+    position: "relative",
+    height: 180,
+  },
+  recipeImage: {
+    width: "100%",
+    height: "100%",
+  },
+  placeholderImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F8F8F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  favoriteBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#FF9F1C",
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
   },
   recipeContent: {
-    flex: 1,
-  },
-  recipeHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 6,
+    padding: 16,
   },
   recipeTitle: {
     fontSize: 18,
     color: "#000000",
-    flex: 1,
-    marginRight: 8,
+    marginBottom: 8,
+    lineHeight: 24,
   },
   recipeDescription: {
     fontSize: 14,
     color: "#666666",
-    marginBottom: 8,
+    marginBottom: 12,
     lineHeight: 20,
   },
   recipeMeta: {
@@ -430,11 +534,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#666666",
   },
   rating: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#666666",
   },
   savedDate: {

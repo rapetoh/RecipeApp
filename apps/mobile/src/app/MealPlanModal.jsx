@@ -67,12 +67,29 @@ export function MealPlanModal({
   };
 
   const handleConfirm = () => {
-    if (internalSelectedDate && internalSelectedMealType) {
-      onConfirm({
+    console.log('🎯 MealPlanModal handleConfirm called');
+    console.log('📅 Internal state:', { 
+      date: internalSelectedDate, 
+      mealType: internalSelectedMealType 
+    });
+    
+    if (!internalSelectedDate || !internalSelectedMealType) {
+      console.error('❌ Date or meal type not selected!', {
         date: internalSelectedDate,
-        mealType: internalSelectedMealType,
+        mealType: internalSelectedMealType
       });
+      return;
     }
+    
+    console.log('✅ Calling onConfirm with:', {
+      date: internalSelectedDate,
+      mealType: internalSelectedMealType,
+    });
+    
+    onConfirm({
+      date: internalSelectedDate,
+      mealType: internalSelectedMealType,
+    });
   };
 
   const formatDateForDisplay = (dateStr) => {

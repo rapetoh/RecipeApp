@@ -21,9 +21,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
+  CheckCircle,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
 
@@ -32,6 +33,7 @@ const { width: screenWidth } = Dimensions.get("window");
 export default function MealCalendarScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { auth, isAuthenticated } = useAuth();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -69,18 +71,24 @@ export default function MealCalendarScreen() {
       const startDate = firstDay.toISOString().split("T")[0];
       const endDate = lastDay.toISOString().split("T")[0];
 
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      console.log('📅 Calendar fetching meal plans:', { startDate, endDate, userId: auth.user.id });
+
       const response = await fetch(
-        `/api/meal-plans?userId=${auth.user.id}&startDate=${startDate}&endDate=${endDate}`,
+        `${apiUrl}/api/meal-plans?userId=${auth.user.id}&startDate=${startDate}&endDate=${endDate}`,
       );
 
       if (!response.ok) {
         throw new Error("Failed to fetch meal plans");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('📅 Calendar received meal plans:', result);
+      return result;
     },
     enabled: !!auth?.user?.id && isAuthenticated,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 0, // Always fetch fresh data
+    refetchOnMount: true, // Refetch when navigating to calendar
   });
 
   const handleBackPress = () => {
@@ -94,10 +102,14 @@ export default function MealCalendarScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    // Navigate back to meal planning with selected date
-    router.replace(
-      `/meal-planning?selectedDate=${date.toISOString().split("T")[0]}`,
-    );
+    
+    const dateStr = date.toISOString().split("T")[0];
+    
+    // Store selected date in query cache for meal planning to pick up
+    queryClient.setQueryData(['selectedDateFromCalendar'], dateStr);
+    
+    // Navigate back to previous screen (meal planning)
+    router.back();
   };
 
   const handlePreviousMonth = () => {
@@ -161,14 +173,37 @@ export default function MealCalendarScreen() {
     if (!mealPlans?.data) return false;
 
     const dateStr = date.toISOString().split("T")[0];
-    return mealPlans.data.some((plan) => plan.date === dateStr);
+    return mealPlans.data.some((plan) => {
+      const planDateStr = plan.date.split("T")[0];
+      return planDateStr === dateStr;
+    });
   };
 
   const getMealCount = (date) => {
     if (!mealPlans?.data) return 0;
 
     const dateStr = date.toISOString().split("T")[0];
-    return mealPlans.data.filter((plan) => plan.date === dateStr).length;
+    return mealPlans.data.filter((plan) => {
+      const planDateStr = plan.date.split("T")[0];
+      return planDateStr === dateStr;
+    }).length;
+  };
+
+  // Check if a day has all meals planned (breakfast, lunch, dinner)
+  const isDayFullyPlanned = (date) => {
+    if (!mealPlans?.data) return false;
+    
+    const dateStr = date.toISOString().split("T")[0];
+    const mealsForDay = mealPlans.data.filter((plan) => {
+      const planDateStr = plan.date.split("T")[0];
+      return planDateStr === dateStr;
+    });
+    
+    // Check if we have all 3 meal types
+    const mealTypes = mealsForDay.map(m => m.meal_type);
+    return mealTypes.includes('breakfast') && 
+           mealTypes.includes('lunch') && 
+           mealTypes.includes('dinner');
   };
 
   if (!fontsLoaded) {
@@ -251,6 +286,22 @@ export default function MealCalendarScreen() {
             <View key={weekIndex} style={styles.weekRow}>
               {week.map((dayData, dayIndex) => {
                 const mealCount = getMealCount(dayData.date);
+                const isFullyPlanned = isDayFullyPlanned(dayData.date);
+
+                // Debug log for specific dates
+                if (dayData.dayNumber === 26 && dayData.isCurrentMonth) {
+                  console.log('📅 Calendar - Nov 26 Debug:', {
+                    isFullyPlanned,
+                    mealCount,
+                    isToday: dayData.isToday,
+                    dateStr: dayData.date.toISOString().split("T")[0],
+                    mealsData: mealPlans?.data?.filter(p => {
+                      const planDateStr = p.date.split("T")[0];
+                      const targetDateStr = dayData.date.toISOString().split("T")[0];
+                      return planDateStr === targetDateStr;
+                    })
+                  });
+                }
 
                 return (
                   <TouchableOpacity
@@ -260,10 +311,17 @@ export default function MealCalendarScreen() {
                       !dayData.isCurrentMonth && styles.dayNotCurrentMonth,
                       dayData.isToday && styles.dayToday,
                       dayData.hasMeals && styles.dayWithMeals,
+                      isFullyPlanned && styles.dayFullyPlanned,
                     ]}
                     onPress={() => handleDateSelect(dayData.date)}
                     disabled={dayData.isPast && !dayData.isToday}
                   >
+                    {/* Checkmark badge for fully planned days */}
+                    {isFullyPlanned && (
+                      <View style={styles.completeBadge}>
+                        <CheckCircle size={12} color="#4CAF50" />
+                      </View>
+                    )}
                     <Text
                       style={[
                         styles.dayNumber,
@@ -331,6 +389,15 @@ export default function MealCalendarScreen() {
                 style={[styles.legendText, { fontFamily: "Inter_400Regular" }]}
               >
                 Has meals planned
+              </Text>
+            </View>
+
+            <View style={styles.legendItem}>
+              <View style={[styles.legendIndicator, styles.legendFullyPlanned]} />
+              <Text
+                style={[styles.legendText, { fontFamily: "Inter_400Regular" }]}
+              >
+                All 3 meals planned
               </Text>
             </View>
 
@@ -455,6 +522,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     margin: 2,
     position: "relative",
+    overflow: "visible",
   },
   dayNotCurrentMonth: {
     opacity: 0.3,
@@ -483,6 +551,21 @@ const styles = StyleSheet.create({
   },
   dayNumberWithMeals: {
     color: "#FF9F1C",
+  },
+  dayFullyPlanned: {
+    backgroundColor: "#E8F5E9",
+    borderWidth: 2,
+    borderColor: "#4CAF50",
+  },
+  completeBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 1,
+    zIndex: 10,
+    elevation: 5,
   },
 
   // Meal Indicators
@@ -538,6 +621,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF4E6",
     borderWidth: 2,
     borderColor: "#FF9F1C",
+  },
+  legendFullyPlanned: {
+    backgroundColor: "#E8F5E9",
+    borderWidth: 2,
+    borderColor: "#4CAF50",
   },
   legendText: {
     fontSize: 14,

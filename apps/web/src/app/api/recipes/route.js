@@ -12,6 +12,8 @@ export async function GET(request) {
     const maxTime = searchParams.get("maxTime");
     const featured = searchParams.get("featured");
     const tags = searchParams.get("tags");
+    const creatorUserId = searchParams.get("creatorUserId");
+    const creatorType = searchParams.get("creatorType");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = (page - 1) * limit;
@@ -20,7 +22,7 @@ export async function GET(request) {
     let recipes;
     let total;
 
-    if (search || category || cuisine || difficulty || maxTime || featured === "true" || tags) {
+    if (search || category || cuisine || difficulty || maxTime || featured === "true" || tags || creatorUserId || creatorType) {
       // Complex query with filters - build conditionally
       let conditions = [];
       let values = [];
@@ -53,6 +55,14 @@ export async function GET(request) {
       if (tags) {
         const tagList = tags.split(",").map((tag) => tag.trim());
         conditions.push(`tags && ARRAY[${tagList.map(t => `'${t.replace(/'/g, "''")}'`).join(', ')}]`);
+      }
+
+      if (creatorUserId) {
+        conditions.push(`creator_user_id = '${creatorUserId.replace(/'/g, "''")}'::uuid`);
+      }
+
+      if (creatorType) {
+        conditions.push(`creator_type = '${creatorType.replace(/'/g, "''")}'`);
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

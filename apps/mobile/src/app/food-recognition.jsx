@@ -363,8 +363,8 @@ export default function FoodRecognitionScreen() {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
         Alert.alert(
-          "Recipe Saved!",
-          "Your recipe has been saved successfully.",
+          "Recipe Kept!",
+          "This recipe has been added to your collection.",
           [{ text: "OK" }]
         );
       }
@@ -886,7 +886,7 @@ export default function FoodRecognitionScreen() {
                   </View>
                 )}
 
-                {/* Save Recipe Button */}
+                {/* Keep Recipe Button */}
                 {!savedRecipeId ? (
                   <TouchableOpacity
                     style={[
@@ -905,7 +905,7 @@ export default function FoodRecognitionScreen() {
                             { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
                           ]}
                         >
-                          Saving...
+                          Keeping...
                         </Text>
                       </>
                     ) : (
@@ -917,7 +917,7 @@ export default function FoodRecognitionScreen() {
                             { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
                           ]}
                         >
-                          Save Recipe
+                          Keep Recipe
                         </Text>
                       </>
                     )}

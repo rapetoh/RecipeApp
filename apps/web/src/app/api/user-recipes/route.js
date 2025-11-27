@@ -222,7 +222,7 @@ export async function POST(request) {
       ) VALUES (
         ${name}, 
         ${description || null}, 
-        ${category || 'main'}, 
+        ${category || 'dinner'}, 
         ${cuisine || null}, 
         ${cooking_time || null}, 
         ${prep_time || null},

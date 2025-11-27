@@ -44,8 +44,26 @@ export default function MyRecipesScreen() {
   const { auth, isAuthenticated } = useAuth();
   const [searchText, setSearchText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState("all"); // all, created, saved, generated
+  const [categoryFilter, setCategoryFilter] = useState("all"); // all, breakfast, lunch, dinner, dessert, snack
   
   const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+
+  // Filter options
+  const sourceFilters = [
+    { id: "all", label: "All" },
+    { id: "yours", label: "Yours" },
+    { id: "others", label: "Others" },
+  ];
+
+  const categoryFilters = [
+    { id: "all", label: "All", emoji: "🍽️" },
+    { id: "breakfast", label: "Breakfast", emoji: "🍳" },
+    { id: "lunch", label: "Lunch", emoji: "🥗" },
+    { id: "dinner", label: "Dinner", emoji: "🍽️" },
+    { id: "dessert", label: "Dessert", emoji: "🍰" },
+    { id: "snack", label: "Snack", emoji: "🍿" },
+  ];
   
   // Automatically redirect to sign-in if not authenticated
   useRequireAuth();
@@ -57,44 +75,130 @@ export default function MyRecipesScreen() {
     Inter_700Bold,
   });
 
-  // Fetch user recipes
+  // Fetch user recipes and saved recipes
   const {
     data: recipesData,
     isLoading: loading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["userRecipes", searchText],
+    queryKey: ["allUserRecipes", searchText, sourceFilter, categoryFilter, auth?.user?.id],
     queryFn: async () => {
+      // Fetch user-created recipes, AI-generated recipes, and saved recipes in parallel
       const searchParam = searchText
         ? `?search=${encodeURIComponent(searchText)}`
         : "";
-      const response = await fetch(`${apiUrl}/api/user-recipes${searchParam}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
-        },
-        credentials: 'include',
-      });
+      
+      const [userRecipesResponse, generatedRecipesResponse, savedRecipesResponse] = await Promise.all([
+        // User-created recipes (from user-recipes table)
+        fetch(`${apiUrl}/api/user-recipes${searchParam}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+          },
+          credentials: 'include',
+        }),
+        // AI-generated recipes (from main recipes table where creator_user_id = user)
+        fetch(`${apiUrl}/api/recipes?userId=${auth?.user?.id}&creatorUserId=${auth?.user?.id}&creatorType=ai`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+        // Saved/bookmarked recipes
+        fetch(`${apiUrl}/api/saved-recipes?userId=${auth?.user?.id}`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ]);
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Please sign in to view your recipes");
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch recipes");
+      if (!userRecipesResponse.ok && userRecipesResponse.status !== 401) {
+        throw new Error("Failed to fetch your recipes");
       }
 
-      return response.json();
+      // Parse responses
+      const userRecipesData = userRecipesResponse.ok 
+        ? await userRecipesResponse.json() 
+        : { success: true, data: { recipes: [] } };
+      
+      const generatedRecipesData = generatedRecipesResponse.ok
+        ? await generatedRecipesResponse.json()
+        : { success: true, data: [] };
+      
+      const savedRecipesData = savedRecipesResponse.ok 
+        ? await savedRecipesResponse.json() 
+        : { success: true, data: [] };
+
+      // Combine and mark recipes
+      const userRecipes = (userRecipesData?.data?.recipes || []).map(recipe => ({
+        ...recipe,
+        source: 'created',
+        badge: 'Yours'
+      }));
+
+      const generatedRecipes = (generatedRecipesData?.data || []).map(recipe => ({
+        ...recipe,
+        source: 'generated',
+        badge: 'Generated'
+      }));
+
+      const savedRecipes = (savedRecipesData?.data || [])
+        .filter(saved => 
+          !userRecipes.some(ur => ur.id === saved.id) && 
+          !generatedRecipes.some(gr => gr.id === saved.id)
+        ) // Avoid duplicates
+        .map(recipe => ({
+          ...recipe,
+          source: 'saved',
+          badge: 'Saved'
+        }));
+
+      // Merge all recipes
+      let allRecipes = [...userRecipes, ...generatedRecipes, ...savedRecipes];
+
+      // Apply source filter
+      if (sourceFilter === 'yours') {
+        // Only manually created recipes
+        allRecipes = allRecipes.filter(recipe => recipe.source === 'created');
+      } else if (sourceFilter === 'others') {
+        // AI-generated + saved recipes
+        allRecipes = allRecipes.filter(recipe => 
+          recipe.source === 'generated' || recipe.source === 'saved'
+        );
+      }
+
+      // Apply category filter
+      if (categoryFilter !== 'all') {
+        allRecipes = allRecipes.filter(recipe => 
+          recipe.category?.toLowerCase() === categoryFilter.toLowerCase()
+        );
+      }
+
+      // Apply search filter
+      if (searchText) {
+        allRecipes = allRecipes.filter(recipe =>
+          recipe.name.toLowerCase().includes(searchText.toLowerCase())
+        );
+      }
+
+      return {
+        success: true,
+        data: { recipes: allRecipes }
+      };
     },
     staleTime: 30 * 1000, // 30 seconds
-    enabled: isAuthenticated, // Only fetch if authenticated
+    enabled: isAuthenticated && !!auth?.user?.id, // Only fetch if authenticated
   });
 
   // Delete recipe mutation
   const deleteRecipeMutation = useMutation({
-    mutationFn: async (recipeId) => {
-      const response = await fetch(`${apiUrl}/api/user-recipes/${recipeId}`, {
+    mutationFn: async ({ recipeId, isGenerated }) => {
+      // Use correct endpoint based on recipe type
+      const endpoint = isGenerated 
+        ? `${apiUrl}/api/recipes/${recipeId}`
+        : `${apiUrl}/api/user-recipes/${recipeId}`;
+      
+      const response = await fetch(endpoint, {
         method: "DELETE",
         headers: {
           'Content-Type': 'application/json',
@@ -111,7 +215,7 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["userRecipes"]);
+      queryClient.invalidateQueries(["allUserRecipes"]);
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -171,7 +275,10 @@ export default function MyRecipesScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => deleteRecipeMutation.mutate(recipe.id),
+          onPress: () => deleteRecipeMutation.mutate({ 
+            recipeId: recipe.id, 
+            isGenerated: recipe.source === 'generated'
+          }),
         },
       ],
     );
@@ -224,6 +331,77 @@ export default function MyRecipesScreen() {
         </View>
       </View>
 
+      {/* Source Filter */}
+      <View style={styles.filterSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          {sourceFilters.map((filter) => (
+            <TouchableOpacity
+              key={filter.id}
+              style={[
+                styles.filterPill,
+                sourceFilter === filter.id && styles.filterPillActive,
+              ]}
+              onPress={() => {
+                setSourceFilter(filter.id);
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+              }}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  { fontFamily: "Inter_600SemiBold" },
+                  sourceFilter === filter.id && styles.filterTextActive,
+                ]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Category Filter */}
+      <View style={styles.filterSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          {categoryFilters.map((filter) => (
+            <TouchableOpacity
+              key={filter.id}
+              style={[
+                styles.filterPill,
+                categoryFilter === filter.id && styles.filterPillActive,
+              ]}
+              onPress={() => {
+                setCategoryFilter(filter.id);
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+              }}
+            >
+              <Text style={styles.filterEmoji}>{filter.emoji}</Text>
+              <Text
+                style={[
+                  styles.filterText,
+                  { fontFamily: "Inter_600SemiBold" },
+                  categoryFilter === filter.id && styles.filterTextActive,
+                ]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       <ScrollView
         style={styles.content}
         contentContainerStyle={[
@@ -247,7 +425,7 @@ export default function MyRecipesScreen() {
             <Text
               style={[styles.emptySubtitle, { fontFamily: "Inter_400Regular" }]}
             >
-              Start creating your own recipes and build your personal cookbook!
+              Create your own recipes or save favorites to see them here!
             </Text>
             <TouchableOpacity
               style={styles.emptyCreateButton}
@@ -286,14 +464,18 @@ export default function MyRecipesScreen() {
                   <ChefHat size={32} color="#CCCCCC" />
                 </View>
               )}
-              <View style={styles.creatorBadge}>
+              <View style={[
+                styles.creatorBadge,
+                recipe.badge === 'Saved' && styles.savedBadge,
+                recipe.badge === 'Generated' && styles.generatedBadge,
+              ]}>
                 <Text
                   style={[
                     styles.creatorText,
                     { fontFamily: "Inter_500Medium" },
                   ]}
                 >
-                  YOURS
+                  {recipe.badge?.toUpperCase() || 'YOURS'}
                 </Text>
               </View>
             </View>
@@ -357,37 +539,40 @@ export default function MyRecipesScreen() {
                 </View>
               </View>
 
-              <View style={styles.recipeActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleEditRecipe(recipe.id)}
-                >
-                  <Edit size={16} color="#FF9F1C" />
-                  <Text
-                    style={[
-                      styles.actionButtonText,
-                      { fontFamily: "Inter_500Medium", color: "#FF9F1C" },
-                    ]}
+              {/* Only show edit/delete for user-owned recipes (created or generated) */}
+              {(recipe.source === 'created' || recipe.source === 'generated') && (
+                <View style={styles.recipeActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleEditRecipe(recipe.id)}
                   >
-                    Edit
-                  </Text>
-                </TouchableOpacity>
+                    <Edit size={16} color="#FF9F1C" />
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        { fontFamily: "Inter_500Medium", color: "#FF9F1C" },
+                      ]}
+                    >
+                      Edit
+                    </Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleDeleteRecipe(recipe)}
-                >
-                  <Trash2 size={16} color="#EF4444" />
-                  <Text
-                    style={[
-                      styles.actionButtonText,
-                      { fontFamily: "Inter_500Medium", color: "#EF4444" },
-                    ]}
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleDeleteRecipe(recipe)}
                   >
-                    Delete
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                    <Trash2 size={16} color="#EF4444" />
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        { fontFamily: "Inter_500Medium", color: "#EF4444" },
+                      ]}
+                    >
+                      Delete
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
         ))}
@@ -548,6 +733,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
+  savedBadge: {
+    backgroundColor: "#10B981",
+  },
+  generatedBadge: {
+    backgroundColor: "#8B5CF6",
+  },
   creatorText: {
     color: "#FFFFFF",
     fontSize: 10,
@@ -611,5 +802,37 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 14,
+  },
+
+  // Filters
+  filterSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  filterScrollContent: {
+    paddingRight: 16,
+  },
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  filterPillActive: {
+    backgroundColor: "#000000",
+  },
+  filterEmoji: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  filterText: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  filterTextActive: {
+    color: "#FFFFFF",
   },
 });

@@ -186,7 +186,7 @@ export async function PUT(request, { params }) {
       UPDATE recipes SET
         name = ${name},
         description = ${description || null},
-        category = ${category || 'main'},
+        category = ${category || 'dinner'},
         cuisine = ${cuisine || null},
         cooking_time = ${cooking_time || null},
         prep_time = ${prep_time || null},

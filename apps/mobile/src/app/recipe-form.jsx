@@ -60,11 +60,20 @@ export default function RecipeFormScreen() {
     Inter_700Bold,
   });
 
+  // Category options
+  const categoryOptions = [
+    { value: "breakfast", label: "Breakfast", emoji: "🍳" },
+    { value: "lunch", label: "Lunch", emoji: "🥗" },
+    { value: "dinner", label: "Dinner", emoji: "🍽️" },
+    { value: "dessert", label: "Dessert", emoji: "🍰" },
+    { value: "snack", label: "Snack", emoji: "🍿" },
+  ];
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    category: "main",
+    category: "dinner",
     cuisine: "",
     cooking_time: "",
     prep_time: "",
@@ -78,6 +87,7 @@ export default function RecipeFormScreen() {
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [newTag, setNewTag] = useState("");
+  const [isGeneratedRecipe, setIsGeneratedRecipe] = useState(false); // Track if editing AI-generated recipe
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fetch recipe for editing
@@ -85,13 +95,31 @@ export default function RecipeFormScreen() {
     queryKey: ["userRecipe", edit],
     queryFn: async () => {
       if (!edit) return null;
-      const response = await fetch(`${apiUrl}/api/user-recipes/${edit}`, {
+      
+      // Try user-recipes first (manually created recipes)
+      try {
+        const userResponse = await fetch(`${apiUrl}/api/user-recipes/${edit}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+          },
+          credentials: 'include',
+        });
+        
+        if (userResponse.ok) {
+          return await userResponse.json();
+        }
+      } catch (error) {
+        console.log('Not in user-recipes, trying main recipes table');
+      }
+      
+      // Fall back to main recipes table (for AI-generated recipes owned by user)
+      const response = await fetch(`${apiUrl}/api/recipes/${edit}?userId=${auth?.user?.id}`, {
         headers: {
           'Content-Type': 'application/json',
-          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
         },
-        credentials: 'include',
       });
+      
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error("Please sign in to edit recipes");
@@ -108,6 +136,9 @@ export default function RecipeFormScreen() {
   useEffect(() => {
     if (recipeData?.success && recipeData.data) {
       const recipe = recipeData.data;
+      
+      // Detect if this is an AI-generated recipe from main recipes table
+      setIsGeneratedRecipe(recipe.creator_type === 'ai');
       
       // Parse ingredients and instructions if they're JSON strings
       let ingredients = recipe.ingredients;
@@ -137,7 +168,7 @@ export default function RecipeFormScreen() {
       setFormData({
         name: recipe.name || "",
         description: recipe.description || "",
-        category: recipe.category || "main",
+        category: recipe.category || "dinner",
         cuisine: recipe.cuisine || "",
         cooking_time: recipe.cooking_time?.toString() || "",
         prep_time: recipe.prep_time?.toString() || "",
@@ -167,10 +198,20 @@ export default function RecipeFormScreen() {
         throw new Error("Please sign in to save recipes");
       }
 
-      const url = isEditing 
-        ? `${apiUrl}/api/user-recipes/${edit}` 
-        : `${apiUrl}/api/user-recipes`;
-      const method = isEditing ? "PUT" : "POST";
+      // Determine endpoint based on recipe type
+      let url, method;
+      
+      if (isEditing && isGeneratedRecipe) {
+        // Editing AI-generated recipe - use main recipes endpoint
+        url = `${apiUrl}/api/recipes/${edit}`;
+        method = "PUT";
+      } else {
+        // Creating new or editing user-created recipe - use user-recipes endpoint
+        url = isEditing 
+          ? `${apiUrl}/api/user-recipes/${edit}` 
+          : `${apiUrl}/api/user-recipes`;
+        method = isEditing ? "PUT" : "POST";
+      }
 
       const response = await fetch(url, {
         method,
@@ -517,36 +558,55 @@ export default function RecipeFormScreen() {
             />
           </View>
 
-          <View style={styles.rowInputs}>
-            <View style={styles.rowInput}>
-              <Text
-                style={[styles.inputLabel, { fontFamily: "Inter_500Medium" }]}
-              >
-                Cuisine
-              </Text>
-              <TextInput
-                style={[styles.textInput, { fontFamily: "Inter_400Regular" }]}
-                placeholder="e.g. Italian"
-                value={formData.cuisine}
-                onChangeText={(value) =>
-                  setFormData({ ...formData, cuisine: value })
-                }
-              />
-            </View>
-            <View style={styles.rowInput}>
-              <Text
-                style={[styles.inputLabel, { fontFamily: "Inter_500Medium" }]}
-              >
-                Category
-              </Text>
-              <TextInput
-                style={[styles.textInput, { fontFamily: "Inter_400Regular" }]}
-                placeholder="e.g. Main"
-                value={formData.category}
-                onChangeText={(value) =>
-                  setFormData({ ...formData, category: value })
-                }
-              />
+          <View style={styles.inputGroup}>
+            <Text
+              style={[styles.inputLabel, { fontFamily: "Inter_500Medium" }]}
+            >
+              Cuisine
+            </Text>
+            <TextInput
+              style={[styles.textInput, { fontFamily: "Inter_400Regular" }]}
+              placeholder="e.g. Italian"
+              value={formData.cuisine}
+              onChangeText={(value) =>
+                setFormData({ ...formData, cuisine: value })
+              }
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text
+              style={[styles.inputLabel, { fontFamily: "Inter_500Medium" }]}
+            >
+              Category
+            </Text>
+            <View style={styles.categorySelector}>
+              {categoryOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.categoryOption,
+                    formData.category === option.value && styles.categoryOptionActive,
+                  ]}
+                  onPress={() => {
+                    setFormData({ ...formData, category: option.value });
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                  }}
+                >
+                  <Text style={styles.categoryEmoji}>{option.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.categoryOptionText,
+                      { fontFamily: "Inter_500Medium" },
+                      formData.category === option.value && styles.categoryOptionTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>
@@ -1178,5 +1238,43 @@ const styles = StyleSheet.create({
     color: "#666666",
     textAlign: "center",
     lineHeight: 24,
+  },
+
+  // Category Selector
+  formGroup: {
+    marginBottom: 20,
+  },
+  categorySelector: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+    marginHorizontal: -4,
+  },
+  categoryOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  categoryOptionActive: {
+    backgroundColor: "#FFF5E6",
+    borderColor: "#FF9F1C",
+  },
+  categoryEmoji: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  categoryOptionText: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  categoryOptionTextActive: {
+    color: "#FF9F1C",
   },
 });     

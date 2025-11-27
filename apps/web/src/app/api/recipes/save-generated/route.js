@@ -60,6 +60,16 @@ async function getUserId(request) {
 // POST /api/recipes/save-generated - Save a generated recipe from food recognition
 export async function POST(request) {
   try {
+    // Get authenticated user ID
+    const userId = await getUserId(request);
+    
+    if (!userId) {
+      return Response.json(
+        { success: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       name,
@@ -107,16 +117,16 @@ export async function POST(request) {
       );
     }
 
-    // Save the recipe
+    // Save the recipe with user ID
     const result = await sql`
       INSERT INTO recipes (
         name, description, category, cuisine, cooking_time, prep_time,
         difficulty, servings, ingredients, instructions, image_url,
-        nutrition, tags, creator_type, estimated_cost, average_rating, rating_count, is_featured
+        nutrition, tags, creator_type, creator_user_id, estimated_cost, average_rating, rating_count, is_featured
       ) VALUES (
         ${name}, 
         ${description || null}, 
-        ${category || 'main'}, 
+        ${category || 'dinner'}, 
         ${cuisine || null}, 
         ${cooking_time || null}, 
         ${prep_time || null},
@@ -128,6 +138,7 @@ export async function POST(request) {
         ${JSON.stringify(nutrition || {})}::jsonb,
         ${Array.isArray(tags) ? tags : []},
         'ai',
+        ${userId}::uuid,
         ${12.0},
         ${4.2},
         ${1},

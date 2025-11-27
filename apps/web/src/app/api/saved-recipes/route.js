@@ -5,6 +5,7 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
+    const search = searchParams.get("search");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = (page - 1) * limit;
@@ -16,7 +17,7 @@ export async function GET(request) {
       );
     }
 
-    console.log("Fetching saved recipes for user:", userId);
+    console.log("Fetching saved recipes for user:", userId, "with search:", search);
 
     // Try to find user first to validate
     const userExists = await sql`
@@ -31,26 +32,62 @@ export async function GET(request) {
       );
     }
 
-    const savedRecipes = await sql`
-      SELECT 
-        sr.id as saved_id, sr.created_at as saved_at,
-        r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
-        r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
-        r.tags, r.average_rating, r.rating_count, r.estimated_cost
-      FROM saved_recipes sr
-      JOIN recipes r ON sr.recipe_id = r.id
-      WHERE sr.user_id = ${userId}::uuid
-      ORDER BY sr.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+    let savedRecipes;
+    let total;
 
-    // Get total count
-    const countResult = await sql`
-      SELECT COUNT(*) as total 
-      FROM saved_recipes 
-      WHERE user_id = ${userId}::uuid
-    `;
-    const total = parseInt(countResult[0].total);
+    if (search) {
+      const searchPattern = `%${search}%`;
+      savedRecipes = await sql`
+        SELECT 
+          sr.id as saved_id, sr.created_at as saved_at,
+          r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
+          r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
+          r.tags, r.average_rating, r.rating_count, r.estimated_cost
+        FROM saved_recipes sr
+        JOIN recipes r ON sr.recipe_id = r.id
+        WHERE sr.user_id = ${userId}::uuid
+        AND (
+          LOWER(r.name) LIKE LOWER(${searchPattern}) OR 
+          LOWER(r.description) LIKE LOWER(${searchPattern}) OR
+          LOWER(r.cuisine) LIKE LOWER(${searchPattern})
+        )
+        ORDER BY sr.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+
+      const countResult = await sql`
+        SELECT COUNT(*) as total 
+        FROM saved_recipes sr
+        JOIN recipes r ON sr.recipe_id = r.id
+        WHERE sr.user_id = ${userId}::uuid
+        AND (
+          LOWER(r.name) LIKE LOWER(${searchPattern}) OR 
+          LOWER(r.description) LIKE LOWER(${searchPattern}) OR
+          LOWER(r.cuisine) LIKE LOWER(${searchPattern})
+        )
+      `;
+      total = parseInt(countResult[0].total);
+    } else {
+      savedRecipes = await sql`
+        SELECT 
+          sr.id as saved_id, sr.created_at as saved_at,
+          r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
+          r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
+          r.tags, r.average_rating, r.rating_count, r.estimated_cost
+        FROM saved_recipes sr
+        JOIN recipes r ON sr.recipe_id = r.id
+        WHERE sr.user_id = ${userId}::uuid
+        ORDER BY sr.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+
+      const countResult = await sql`
+        SELECT COUNT(*) as total 
+        FROM saved_recipes 
+        WHERE user_id = ${userId}::uuid
+      `;
+      total = parseInt(countResult[0].total);
+    }
 
     console.log(
       `Found ${savedRecipes.length} saved recipes for user ${userId}`,

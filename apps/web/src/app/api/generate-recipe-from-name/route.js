@@ -91,7 +91,7 @@ export async function POST(request) {
       cuisine: "Global",
       difficulty: "medium",
       estimated_time: 30,
-      category: "main",
+      category: "dinner",
     };
 
     // Fetch user preferences if userId is provided
