@@ -66,6 +66,65 @@ export async function GET(request) {
         },
       });
     }
+    
+    // If today's recommendation doesn't exist, check for most recent available (fallback)
+    // Look back up to 7 days to find the most recent recommendation
+    const fallbackRecommendation = await sql`
+      SELECT 
+        dr.*,
+        r.name, r.description, r.image_url, r.cooking_time, r.difficulty,
+        r.cuisine, r.category, r.nutrition, r.average_rating, r.estimated_cost
+      FROM daily_recommendations dr
+      JOIN recipes r ON dr.recommended_recipe_id = r.id
+      WHERE dr.user_id = ${userId}::uuid 
+        AND dr.date < ${date}::date
+        AND dr.date >= ${date}::date - interval '7 days'
+      ORDER BY dr.date DESC
+      LIMIT 1
+    `;
+    
+    // If we found fallback recommendation, return it immediately
+    // (so user doesn't wait while we generate today's recommendation)
+    if (fallbackRecommendation.length > 0) {
+      const recommendation = fallbackRecommendation[0];
+      
+      // Get alternative recipes
+      const alternatives = await sql`
+        SELECT id, name, description, image_url, cooking_time, difficulty,
+               cuisine, category, nutrition, average_rating, estimated_cost
+        FROM recipes
+        WHERE id = ANY(${recommendation.alternative_recipe_ids || []})
+        ORDER BY average_rating DESC
+      `;
+      
+      return Response.json({
+        success: true,
+        data: {
+          recommendation: {
+            id: recommendation.id,
+            recipe: {
+              id: recommendation.recommended_recipe_id,
+              name: recommendation.name,
+              description: recommendation.description,
+              image_url: recommendation.image_url,
+              cooking_time: recommendation.cooking_time,
+              difficulty: recommendation.difficulty,
+              cuisine: recommendation.cuisine,
+              category: recommendation.category,
+              nutrition: recommendation.nutrition,
+              average_rating: recommendation.average_rating,
+              estimated_cost: recommendation.estimated_cost,
+            },
+            reason: recommendation.reason,
+            alternatives: alternatives,
+            presented: recommendation.presented,
+            accepted: recommendation.accepted,
+            date: recommendation.date,
+          },
+        },
+        fallback: true, // Indicate this is a fallback recommendation
+      });
+    }
 
     // Generate new AI-powered recommendations
     const [user, recentMeals, availableRecipes] = await sql.transaction([
@@ -236,6 +295,66 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("Error generating recommendations:", error);
+    
+    // Before returning error, try to return fallback recommendation
+    try {
+      const date = new Date().toISOString().split("T")[0];
+      const fallbackRec = await sql`
+        SELECT 
+          dr.*,
+          r.name, r.description, r.image_url, r.cooking_time, r.difficulty,
+          r.cuisine, r.category, r.nutrition, r.average_rating, r.estimated_cost
+        FROM daily_recommendations dr
+        JOIN recipes r ON dr.recommended_recipe_id = r.id
+        WHERE dr.user_id = ${userId}::uuid 
+          AND dr.date < ${date}::date
+          AND dr.date >= ${date}::date - interval '7 days'
+        ORDER BY dr.date DESC
+        LIMIT 1
+      `;
+      
+      if (fallbackRec.length > 0) {
+        const recommendation = fallbackRec[0];
+        const alternatives = await sql`
+          SELECT id, name, description, image_url, cooking_time, difficulty,
+                 cuisine, category, nutrition, average_rating, estimated_cost
+          FROM recipes
+          WHERE id = ANY(${recommendation.alternative_recipe_ids || []})
+          ORDER BY average_rating DESC
+        `;
+        
+        return Response.json({
+          success: true,
+          data: {
+            recommendation: {
+              id: recommendation.id,
+              recipe: {
+                id: recommendation.recommended_recipe_id,
+                name: recommendation.name,
+                description: recommendation.description,
+                image_url: recommendation.image_url,
+                cooking_time: recommendation.cooking_time,
+                difficulty: recommendation.difficulty,
+                cuisine: recommendation.cuisine,
+                category: recommendation.category,
+                nutrition: recommendation.nutrition,
+                average_rating: recommendation.average_rating,
+                estimated_cost: recommendation.estimated_cost,
+              },
+              reason: recommendation.reason,
+              alternatives: alternatives,
+              presented: recommendation.presented,
+              accepted: recommendation.accepted,
+              date: recommendation.date,
+            },
+          },
+          fallback: true,
+        });
+      }
+    } catch (fallbackError) {
+      console.error("Error getting fallback recommendation:", fallbackError);
+    }
+    
     return Response.json(
       { success: false, error: "Failed to generate recommendations" },
       { status: 500 },

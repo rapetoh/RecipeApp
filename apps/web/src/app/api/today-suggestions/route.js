@@ -2,6 +2,202 @@ import sql from "@/app/api/utils/sql";
 import { generateTodaySuggestions } from "@/app/api/utils/openai";
 import { generateImageWithDALLE } from "@/app/api/utils/openai";
 
+// Helper function to generate suggestions for a date (can be called async in background)
+async function generateSuggestionsForDate(userId, date) {
+  try {
+    // Check if suggestions already exist to avoid duplicate generation
+    const existingCheck = await sql`
+      SELECT COUNT(*) as count
+      FROM user_daily_suggestions
+      WHERE user_id = ${userId}::uuid AND date = ${date}::date
+      LIMIT 1
+    `;
+    
+    if (parseInt(existingCheck[0]?.count || 0) > 0) {
+      console.log(`Suggestions already exist for ${date}, skipping generation`);
+      return; // Already exists, don't regenerate
+    }
+
+    // Collect comprehensive user data for personalization
+    const [
+      userPrefs,
+      savedRecipes,
+      recentMeals,
+      createdRecipes,
+      recentSuggestions,
+      dislikedRecipes
+    ] = await Promise.all([
+      sql`
+        SELECT 
+          diet_type, allergies, dislikes, preferred_cuisines, 
+          calorie_goal, experience_level, cooking_skill, cooking_schedule,
+          goals, preferred_cooking_time, people_count
+        FROM users 
+        WHERE id = ${userId}::uuid
+      `,
+      sql`
+        SELECT 
+          r.name, r.tags, r.cuisine, r.category
+        FROM saved_recipes sr
+        JOIN recipes r ON sr.recipe_id = r.id
+        WHERE sr.user_id = ${userId}::uuid
+        ORDER BY sr.created_at DESC
+        LIMIT 20
+      `,
+      sql`
+        SELECT 
+          r.name, r.cuisine, r.category, mt.liked, mt.cooked_date,
+          (${date}::date - mt.cooked_date) as days_ago
+        FROM meal_tracking mt
+        JOIN recipes r ON mt.recipe_id = r.id
+        WHERE mt.user_id = ${userId}::uuid 
+          AND mt.cooked_date >= ${date}::date - interval '14 days'
+        ORDER BY mt.cooked_date DESC
+        LIMIT 20
+      `,
+      sql`
+        SELECT 
+          name, tags, cuisine, category
+        FROM recipes
+        WHERE creator_user_id = ${userId}::uuid
+        ORDER BY created_at DESC
+        LIMIT 10
+      `,
+      sql`
+        SELECT r.name, r.cuisine, r.category
+        FROM user_daily_suggestions uds
+        JOIN recipes r ON uds.recipe_id = r.id
+        WHERE uds.user_id = ${userId}::uuid 
+          AND uds.date >= ${date}::date - interval '7 days'
+          AND uds.date < ${date}::date
+        ORDER BY uds.date DESC
+        LIMIT 30
+      `,
+      sql`
+        SELECT DISTINCT r.id, r.name, r.cuisine, r.category, r.ingredients, r.tags
+        FROM meal_tracking mt
+        JOIN recipes r ON mt.recipe_id = r.id
+        WHERE mt.user_id = ${userId}::uuid
+          AND mt.liked = false
+        LIMIT 20
+      `
+    ]);
+
+    if (userPrefs.length === 0) {
+      console.error(`User not found for ${userId}`);
+      return;
+    }
+
+    const preferences = userPrefs[0];
+    const saved = savedRecipes.map(r => ({
+      name: r.name,
+      tags: r.tags || [],
+      cuisine: r.cuisine,
+      category: r.category,
+      title: r.name
+    }));
+    const recent = recentMeals.map(m => ({
+      name: m.name,
+      cuisine: m.cuisine,
+      category: m.category,
+      liked: m.liked,
+      days_ago: parseInt(m.days_ago) || 0,
+      recipe_name: m.name
+    }));
+    const created = createdRecipes.map(r => ({
+      name: r.name,
+      tags: r.tags || [],
+      cuisine: r.cuisine,
+      category: r.category,
+      title: r.name
+    }));
+    const dislikedRecipesList = dislikedRecipes.map(r => ({
+      name: r.name,
+      cuisine: r.cuisine,
+      category: r.category,
+      ingredients: r.ingredients,
+      tags: r.tags,
+    }));
+
+    // Generate AI suggestions
+    let generatedRecipes;
+    try {
+      generatedRecipes = await generateTodaySuggestions(
+        preferences,
+        saved,
+        recent,
+        created,
+        dislikedRecipesList
+      );
+    } catch (error) {
+      console.error("Error generating AI suggestions in background:", error);
+      return;
+    }
+
+    if (!generatedRecipes || generatedRecipes.length === 0) {
+      console.error("No recipes generated in background");
+      return;
+    }
+
+    // Save recipes to database and link them
+    for (const recipeData of generatedRecipes) {
+      try {
+        // Generate image for recipe
+        let imageUrl = null;
+        try {
+          imageUrl = await generateImageWithDALLE(recipeData.name);
+        } catch (imgError) {
+          console.warn("Failed to generate image for recipe:", recipeData.name, imgError);
+        }
+
+        // Save recipe to database
+        const savedRecipe = await sql`
+          INSERT INTO recipes (
+            name, description, category, cuisine, cooking_time, prep_time,
+            difficulty, servings, ingredients, instructions, image_url,
+            nutrition, tags, estimated_cost, creator_type, creator_user_id,
+            average_rating, rating_count
+          ) VALUES (
+            ${recipeData.name},
+            ${recipeData.description || ''},
+            ${recipeData.category || 'lunch'},
+            ${recipeData.cuisine || 'International'},
+            ${recipeData.cooking_time || 30},
+            ${recipeData.prep_time || 15},
+            ${recipeData.difficulty || 'medium'},
+            ${recipeData.servings || 4},
+            ${JSON.stringify(recipeData.ingredients || [])},
+            ${JSON.stringify(recipeData.instructions || [])},
+            ${imageUrl},
+            ${JSON.stringify(recipeData.nutrition || {})},
+            ${recipeData.tags || []},
+            ${recipeData.estimated_cost || 10.0},
+            ${'ai'},
+            ${userId}::uuid,
+            ${4.0},
+            ${0}
+          ) RETURNING id
+        `;
+
+        const recipeId = savedRecipe[0].id;
+
+        // Link recipe to user's daily suggestions
+        await sql`
+          INSERT INTO user_daily_suggestions (user_id, date, recipe_id)
+          VALUES (${userId}::uuid, ${date}, ${recipeId})
+          ON CONFLICT (user_id, date, recipe_id) DO NOTHING
+        `;
+      } catch (dbError) {
+        console.error("Error saving recipe in background:", recipeData.name, dbError);
+      }
+    }
+    
+    console.log(`Successfully generated ${generatedRecipes.length} suggestions for ${date} in background`);
+  } catch (error) {
+    console.error("Error in generateSuggestionsForDate:", error);
+  }
+}
+
 // GET /api/today-suggestions - Get or generate today's AI suggestions
 export async function GET(request) {
   try {
@@ -41,6 +237,45 @@ export async function GET(request) {
           success: true,
           data: existingSuggestions,
           cached: true,
+        });
+      }
+      
+      // If today's suggestions don't exist, check for most recent available (fallback)
+      // Look back up to 7 days to find the most recent suggestions
+      const fallbackSuggestions = await sql`
+        SELECT 
+          r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
+          r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition, 
+          r.tags, r.average_rating, r.estimated_cost, r.ingredients, r.instructions,
+          uds.generated_at, uds.date as suggestion_date
+        FROM user_daily_suggestions uds
+        JOIN recipes r ON uds.recipe_id = r.id
+        LEFT JOIN meal_tracking mt ON mt.user_id = ${userId}::uuid 
+          AND mt.recipe_id = r.id 
+          AND mt.liked = false
+        WHERE uds.user_id = ${userId}::uuid 
+          AND uds.date < ${date}::date
+          AND uds.date >= ${date}::date - interval '7 days'
+          AND mt.id IS NULL
+        ORDER BY uds.date DESC
+        LIMIT 9
+      `;
+      
+      // If we found fallback suggestions, return them immediately
+      // (so user doesn't wait while we generate today's suggestions)
+      if (fallbackSuggestions.length > 0) {
+        // Trigger generation of today's suggestions in background (non-blocking)
+        // We don't await this - it runs in the background
+        generateSuggestionsForDate(userId, date).catch(err => {
+          console.error("Background suggestion generation failed:", err);
+        });
+        
+        return Response.json({
+          success: true,
+          data: fallbackSuggestions,
+          cached: true,
+          fallback: true, // Indicate these are fallback suggestions
+          fallbackDate: fallbackSuggestions[0].suggestion_date,
         });
       }
     } else {
@@ -152,6 +387,13 @@ export async function GET(request) {
       category: r.category,
       title: r.name // alias
     }));
+    const dislikedRecipesList = dislikedRecipes.map(r => ({
+      name: r.name,
+      cuisine: r.cuisine,
+      category: r.category,
+      ingredients: r.ingredients,
+      tags: r.tags,
+    }));
 
     // Generate AI suggestions
     let generatedRecipes;
@@ -165,6 +407,37 @@ export async function GET(request) {
       );
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
+      
+      // Before returning error, try to return fallback suggestions
+      const fallbackOnError = await sql`
+        SELECT 
+          r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
+          r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition, 
+          r.tags, r.average_rating, r.estimated_cost, r.ingredients, r.instructions,
+          uds.generated_at, uds.date as suggestion_date
+        FROM user_daily_suggestions uds
+        JOIN recipes r ON uds.recipe_id = r.id
+        LEFT JOIN meal_tracking mt ON mt.user_id = ${userId}::uuid 
+          AND mt.recipe_id = r.id 
+          AND mt.liked = false
+        WHERE uds.user_id = ${userId}::uuid 
+          AND uds.date < ${date}::date
+          AND uds.date >= ${date}::date - interval '7 days'
+          AND mt.id IS NULL
+        ORDER BY uds.date DESC
+        LIMIT 9
+      `;
+      
+      if (fallbackOnError.length > 0) {
+        return Response.json({
+          success: true,
+          data: fallbackOnError,
+          cached: true,
+          fallback: true,
+          fallbackDate: fallbackOnError[0].suggestion_date,
+        });
+      }
+      
       return Response.json(
         { 
           success: false, 
@@ -176,6 +449,36 @@ export async function GET(request) {
     }
 
     if (!generatedRecipes || generatedRecipes.length === 0) {
+      // Before returning error, try to return fallback suggestions
+      const fallbackOnEmpty = await sql`
+        SELECT 
+          r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
+          r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition, 
+          r.tags, r.average_rating, r.estimated_cost, r.ingredients, r.instructions,
+          uds.generated_at, uds.date as suggestion_date
+        FROM user_daily_suggestions uds
+        JOIN recipes r ON uds.recipe_id = r.id
+        LEFT JOIN meal_tracking mt ON mt.user_id = ${userId}::uuid 
+          AND mt.recipe_id = r.id 
+          AND mt.liked = false
+        WHERE uds.user_id = ${userId}::uuid 
+          AND uds.date < ${date}::date
+          AND uds.date >= ${date}::date - interval '7 days'
+          AND mt.id IS NULL
+        ORDER BY uds.date DESC
+        LIMIT 9
+      `;
+      
+      if (fallbackOnEmpty.length > 0) {
+        return Response.json({
+          success: true,
+          data: fallbackOnEmpty,
+          cached: true,
+          fallback: true,
+          fallbackDate: fallbackOnEmpty[0].suggestion_date,
+        });
+      }
+      
       return Response.json(
         { success: false, error: "No recipes generated" },
         { status: 500 },

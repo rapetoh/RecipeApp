@@ -110,7 +110,7 @@ export default function HomeScreen() {
     });
 
   // Fetch today's AI-generated suggestions
-  const { data: todaySuggestionsData, isLoading: todaySuggestionsLoading, refetch: refetchTodaySuggestions } = useQuery({
+  const { data: todaySuggestionsResponse, isLoading: todaySuggestionsLoading, refetch: refetchTodaySuggestions } = useQuery({
     queryKey: ["today-suggestions", auth?.user?.id],
     queryFn: async () => {
       if (!auth?.user?.id) return null;
@@ -121,12 +121,33 @@ export default function HomeScreen() {
         throw new Error("Failed to fetch today's suggestions");
       }
       const result = await response.json();
-      return result.success ? result.data : null;
+      // Return full response to access fallback flag
+      return result.success ? result : null;
     },
     enabled: !!auth?.user?.id && isAuthenticated,
     staleTime: 1000 * 60 * 60, // 1 hour (suggestions refresh daily)
     retry: 2,
+    // Poll every 30 seconds if we're showing fallback suggestions
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Enable polling if we're showing fallback suggestions
+      if (data?.fallback === true) {
+        return 30000; // Poll every 30 seconds
+      }
+      return false; // Stop polling when we have today's suggestions
+    },
   });
+  
+  // Extract suggestions data and fallback flag
+  const todaySuggestions = todaySuggestionsResponse?.data || [];
+  const isShowingFallback = todaySuggestionsResponse?.fallback === true;
+  
+  // Filter suggestions by category
+  const filteredSuggestions = todaySuggestions && todaySuggestions.length > 0
+    ? (suggestionCategory === "all" 
+        ? todaySuggestions 
+        : todaySuggestions.filter(r => r.category === suggestionCategory))
+    : [];
 
   // Accept recommendation mutation
   const acceptRecommendationMutation = useMutation({
@@ -321,8 +342,16 @@ export default function HomeScreen() {
       
       // Optimistically remove from UI immediately (no waiting for refetch)
       queryClient.setQueryData(["today-suggestions", auth?.user?.id], (oldData) => {
-        if (!oldData) return oldData;
-        return oldData.filter(recipe => recipe.id !== recipeId);
+        // oldData is the full response object: { success, data: [...], fallback, ... }
+        if (!oldData || !oldData.data || !Array.isArray(oldData.data)) {
+          return oldData; // Return unchanged if data structure is invalid
+        }
+        
+        // Filter the data array and return new response object
+        return {
+          ...oldData,
+          data: oldData.data.filter(recipe => recipe.id !== recipeId),
+        };
       });
       
       // Also invalidate to sync with backend
@@ -403,15 +432,7 @@ export default function HomeScreen() {
   }
 
   const recommendation = recommendationData?.data?.recommendation;
-  const todaySuggestions = todaySuggestionsData || [];
   const userName = auth?.user?.name?.split(" ")[0] || "User";
-
-  // Filter suggestions by category
-  const filteredSuggestions = todaySuggestions && todaySuggestions.length > 0
-    ? (suggestionCategory === "all" 
-        ? todaySuggestions 
-        : todaySuggestions.filter(r => r.category === suggestionCategory))
-    : [];
 
   return (
     <>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Home, Heart, Search, User } from "lucide-react-native";
+import { Home, Heart, BookOpen, Calendar } from "lucide-react-native";
 
 export default function TabLayout() {
   return (
@@ -33,8 +33,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: "Search",
-          tabBarIcon: ({ color, size }) => <Search color={color} size={24} />,
+          title: "My Recipes",
+          tabBarIcon: ({ color, size }) => <BookOpen color={color} size={24} />,
         }}
       />
       <Tabs.Screen
@@ -45,10 +45,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="meal-plan"
+        options={{
+          title: "Meal Plan",
+          tabBarIcon: ({ color, size }) => <Calendar color={color} size={24} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color, size }) => <User color={color} size={24} />,
+          href: null, // Hide from tab bar but keep route accessible
         }}
       />
     </Tabs>
