@@ -89,8 +89,8 @@ export default function MyRecipesScreen() {
         ? `?search=${encodeURIComponent(searchText)}`
         : "";
       
-      const [userRecipesResponse, generatedRecipesResponse, savedRecipesResponse] = await Promise.all([
-        // User-created recipes (from user-recipes table)
+      const [userRecipesResponse, savedRecipesResponse] = await Promise.all([
+        // User-created recipes (from user-recipes table) - ONLY these are "My Recipes"
         fetch(`${apiUrl}/api/user-recipes${searchParam}`, {
           headers: {
             'Content-Type': 'application/json',
@@ -98,13 +98,7 @@ export default function MyRecipesScreen() {
           },
           credentials: 'include',
         }),
-        // AI-generated recipes (from main recipes table where creator_user_id = user)
-        fetch(`${apiUrl}/api/recipes?userId=${auth?.user?.id}&creatorUserId=${auth?.user?.id}&creatorType=ai`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }),
-        // Saved/bookmarked recipes
+        // Saved/bookmarked recipes (favorited recipes become user recipes)
         fetch(`${apiUrl}/api/saved-recipes?userId=${auth?.user?.id}`, {
           headers: {
             'Content-Type': 'application/json',
@@ -121,50 +115,38 @@ export default function MyRecipesScreen() {
         ? await userRecipesResponse.json() 
         : { success: true, data: { recipes: [] } };
       
-      const generatedRecipesData = generatedRecipesResponse.ok
-        ? await generatedRecipesResponse.json()
-        : { success: true, data: [] };
-      
       const savedRecipesData = savedRecipesResponse.ok 
         ? await savedRecipesResponse.json() 
         : { success: true, data: [] };
 
-      // Combine and mark recipes
+      // User-created recipes
       const userRecipes = (userRecipesData?.data?.recipes || []).map(recipe => ({
         ...recipe,
         source: 'created',
         badge: 'Yours'
       }));
 
-      const generatedRecipes = (generatedRecipesData?.data || []).map(recipe => ({
-        ...recipe,
-        source: 'generated',
-        badge: 'Generated'
-      }));
-
+      // Saved recipes (favorited) - these count as user recipes now
       const savedRecipes = (savedRecipesData?.data || [])
         .filter(saved => 
-          !userRecipes.some(ur => ur.id === saved.id) && 
-          !generatedRecipes.some(gr => gr.id === saved.id)
-        ) // Avoid duplicates
+          !userRecipes.some(ur => ur.id === saved.id) // Avoid duplicates with created recipes
+        )
         .map(recipe => ({
           ...recipe,
           source: 'saved',
           badge: 'Saved'
         }));
 
-      // Merge all recipes
-      let allRecipes = [...userRecipes, ...generatedRecipes, ...savedRecipes];
+      // Merge user-created and favorited recipes
+      let allRecipes = [...userRecipes, ...savedRecipes];
 
       // Apply source filter
       if (sourceFilter === 'yours') {
         // Only manually created recipes
         allRecipes = allRecipes.filter(recipe => recipe.source === 'created');
       } else if (sourceFilter === 'others') {
-        // AI-generated + saved recipes
-        allRecipes = allRecipes.filter(recipe => 
-          recipe.source === 'generated' || recipe.source === 'saved'
-        );
+        // Only favorited/saved recipes (not AI suggestions, those never show here)
+        allRecipes = allRecipes.filter(recipe => recipe.source === 'saved');
       }
 
       // Apply category filter
@@ -539,8 +521,8 @@ export default function MyRecipesScreen() {
                 </View>
               </View>
 
-              {/* Only show edit/delete for user-owned recipes (created or generated) */}
-              {(recipe.source === 'created' || recipe.source === 'generated') && (
+              {/* Only show edit/delete for user-created recipes */}
+              {recipe.source === 'created' && (
                 <View style={styles.recipeActions}>
                   <TouchableOpacity
                     style={styles.actionButton}

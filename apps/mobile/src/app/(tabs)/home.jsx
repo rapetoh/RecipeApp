@@ -9,6 +9,9 @@ import {
   FlatList,
   Platform,
   Alert,
+  ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -23,7 +26,7 @@ import {
 import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Menu, Bell, Camera, Settings } from "lucide-react-native";
+import { Menu, Bell, Camera, Settings, Heart, X } from "lucide-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -34,7 +37,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auth, isAuthenticated, signIn } = useAuth();
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [suggestionCategory, setSuggestionCategory] = useState("all");
+  const [longPressModalVisible, setLongPressModalVisible] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [selectedRecipePosition, setSelectedRecipePosition] = useState({ x: 0, y: 0 });
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -103,25 +109,23 @@ export default function HomeScreen() {
       staleTime: 1000 * 60 * 30, // 30 minutes
     });
 
-  // Fetch recipes based on category
-  const { data: recipesData, isLoading: recipesLoading } = useQuery({
-    queryKey: ["recipes", activeCategory, auth?.user?.id],
+  // Fetch today's AI-generated suggestions
+  const { data: todaySuggestionsData, isLoading: todaySuggestionsLoading, refetch: refetchTodaySuggestions } = useQuery({
+    queryKey: ["today-suggestions", auth?.user?.id],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        limit: "20",
-        ...(activeCategory !== "all" && { category: activeCategory }),
-        ...(auth?.user?.id && { userId: auth.user.id }), // Include user ID for saved status
-        ...(auth?.user?.id && { creatorUserId: auth.user.id }), // Only show user's own recipes
-      });
-
+      if (!auth?.user?.id) return null;
+      
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const response = await fetch(`${apiUrl}/api/recipes?${params}`);
+      const response = await fetch(`${apiUrl}/api/today-suggestions?userId=${auth.user.id}`);
       if (!response.ok) {
-        throw new Error("Failed to fetch recipes");
+        throw new Error("Failed to fetch today's suggestions");
       }
-      return response.json();
+      const result = await response.json();
+      return result.success ? result.data : null;
     },
-    staleTime: 1000 * 60 * 15, // 15 minutes
+    enabled: !!auth?.user?.id && isAuthenticated,
+    staleTime: 1000 * 60 * 60, // 1 hour (suggestions refresh daily)
+    retry: 2,
   });
 
   // Accept recommendation mutation
@@ -151,14 +155,39 @@ export default function HomeScreen() {
     },
   });
 
-  const categories = [
-    { id: "all", name: "All", emoji: "🍽️" },
-    { id: "breakfast", name: "Breakfast", emoji: "🍳" },
-    { id: "lunch", name: "Lunch", emoji: "🥗" },
-    { id: "dinner", name: "Dinner", emoji: "🍽️" },
-    { id: "dessert", name: "Dessert", emoji: "🍰" },
-    { id: "snack", name: "Snack", emoji: "🍿" },
-  ];
+  // Regenerate today's suggestions mutation
+  const regenerateSuggestionsMutation = useMutation({
+    mutationFn: async () => {
+      if (!auth?.user?.id) return null;
+      
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const response = await fetch(`${apiUrl}/api/today-suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: auth.user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to regenerate suggestions");
+      }
+      const result = await response.json();
+      return result.success ? result.data : null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["today-suggestions"]);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      Alert.alert("Success", "Today's suggestions have been refreshed!");
+    },
+    onError: (error) => {
+      Alert.alert("Error", error.message || "Failed to regenerate suggestions");
+    },
+  });
+
 
   const handleMenuPress = () => {
     if (Platform.OS !== "web") {
@@ -199,15 +228,156 @@ export default function HomeScreen() {
     router.push("/food-recognition");
   };
 
-  const handleCategoryPress = (category) => {
-    setActiveCategory(category);
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
 
   const handleRecipePress = (recipe) => {
     router.push(`/recipe-detail?id=${recipe.id}`);
+  };
+
+  const handleRegenerateSuggestions = () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign In Required", "Please sign in to regenerate suggestions", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => signIn() },
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      "Regenerate Suggestions",
+      "Generate new recipe suggestions for today? (You can do this up to 2 times per day)",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Regenerate", 
+          onPress: () => regenerateSuggestionsMutation.mutate(),
+          style: "default"
+        },
+      ]
+    );
+  };
+
+  // Favorite recipe mutation
+  const favoriteRecipeMutation = useMutation({
+    mutationFn: async (recipeId) => {
+      if (!auth?.user?.id) throw new Error("User authentication required");
+      
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const response = await fetch(`${apiUrl}/api/saved-recipes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: auth.user.id,
+          recipeId: recipeId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save recipe");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["today-suggestions"]);
+      queryClient.invalidateQueries(["saved-recipes"]);
+      setLongPressModalVisible(false);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      Alert.alert("Success", "Recipe saved to favorites!");
+    },
+    onError: (error) => {
+      Alert.alert("Error", error.message || "Failed to save recipe");
+    },
+  });
+
+  // Dislike recipe mutation
+  const dislikeRecipeMutation = useMutation({
+    mutationFn: async (recipeId) => {
+      if (!auth?.user?.id) throw new Error("User authentication required");
+      
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const response = await fetch(`${apiUrl}/api/meal-tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: auth.user.id,
+          recipeId: recipeId,
+          liked: false, // Mark as disliked
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to record dislike");
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      // variables is the recipeId we passed to mutate()
+      const recipeId = variables;
+      
+      // Optimistically remove from UI immediately (no waiting for refetch)
+      queryClient.setQueryData(["today-suggestions", auth?.user?.id], (oldData) => {
+        if (!oldData) return oldData;
+        return oldData.filter(recipe => recipe.id !== recipeId);
+      });
+      
+      // Also invalidate to sync with backend
+      queryClient.invalidateQueries(["today-suggestions"]);
+      
+      setLongPressModalVisible(false);
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      // No alert - recipe just disappears silently
+    },
+    onError: (error) => {
+      Alert.alert("Error", error.message || "Failed to record preference");
+    },
+  });
+
+  // Handle long press on suggestion card
+  const handleLongPress = (recipe, event) => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign In Required", "Please sign in to use this feature", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => signIn() },
+      ]);
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    // Get position for modal placement (near the card)
+    const { pageX, pageY } = event.nativeEvent;
+    setSelectedRecipePosition({ x: pageX, y: pageY });
+    setSelectedRecipe(recipe);
+    setLongPressModalVisible(true);
+  };
+
+  // Handle favorite from modal
+  const handleFavoriteFromModal = () => {
+    if (selectedRecipe) {
+      favoriteRecipeMutation.mutate(selectedRecipe.id);
+    }
+  };
+
+  // Handle dislike from modal
+  const handleDislikeFromModal = () => {
+    if (selectedRecipe) {
+      dislikeRecipeMutation.mutate(selectedRecipe.id);
+    }
+  };
+
+  // Close modal
+  const closeLongPressModal = () => {
+    setLongPressModalVisible(false);
+    setSelectedRecipe(null);
   };
 
   const handleAcceptRecommendation = () => {
@@ -233,8 +403,15 @@ export default function HomeScreen() {
   }
 
   const recommendation = recommendationData?.data?.recommendation;
-  const recipes = recipesData?.data || [];
+  const todaySuggestions = todaySuggestionsData || [];
   const userName = auth?.user?.name?.split(" ")[0] || "User";
+
+  // Filter suggestions by category
+  const filteredSuggestions = todaySuggestions && todaySuggestions.length > 0
+    ? (suggestionCategory === "all" 
+        ? todaySuggestions 
+        : todaySuggestions.filter(r => r.category === suggestionCategory))
+    : [];
 
   return (
     <>
@@ -395,112 +572,274 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Category Scroller */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoryScroller}
-          contentContainerStyle={styles.categoryContent}
-        >
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={[
-                styles.categoryPill,
-                activeCategory === category.id && styles.categoryPillActive,
-              ]}
-              onPress={() => handleCategoryPress(category.id)}
-            >
-              <Text style={styles.categoryEmoji}>{category.emoji}</Text>
+        {/* Today's Suggestions Section */}
+        {isAuthenticated && (
+          <View style={styles.suggestionsSection}>
+            <View style={styles.suggestionsHeader}>
               <Text
                 style={[
-                  styles.categoryText,
-                  { fontFamily: "Inter_600SemiBold" },
-                  activeCategory === category.id && styles.categoryTextActive,
+                  styles.suggestionsTitle,
+                  { fontFamily: "Inter_700Bold" },
                 ]}
               >
-                {category.name}
+                Today's Suggestions
               </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Recipe Feed */}
-        <View style={styles.recipeFeed}>
-          {recipesLoading ? (
-            <Text
-              style={[styles.loadingText, { fontFamily: "Inter_400Regular" }]}
-            >
-              Loading recipes...
-            </Text>
-          ) : (
-            <View style={styles.recipeGrid}>
-              {recipes.map((recipe, index) => (
-                <TouchableOpacity
-                  key={recipe.id}
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={handleRegenerateSuggestions}
+                disabled={regenerateSuggestionsMutation.isPending || todaySuggestionsLoading}
+              >
+                <Text
                   style={[
-                    styles.recipeCard,
-                    { marginRight: index % 2 === 0 ? 12 : 0 },
+                    styles.refreshButtonText,
+                    { fontFamily: "Inter_500Medium" },
                   ]}
-                  onPress={() => handleRecipePress(recipe)}
                 >
-                  {/* Recipe Image */}
-                  {recipe.image_url ? (
-                    <Image
-                      source={{ uri: recipe.image_url }}
-                      style={styles.recipeImage}
-                      contentFit="cover"
-                      transition={200}
-                    />
-                  ) : (
-                    <View style={styles.recipeImagePlaceholder}>
-                      <Text style={styles.placeholderEmoji}>🍽️</Text>
-                    </View>
-                  )}
-                  
-                  {/* Recipe Content */}
-                  <View style={styles.recipeCardContent}>
-                    <Text
-                      style={[
-                        styles.recipeTitle,
-                        { fontFamily: "Inter_600SemiBold" },
-                      ]}
-                    >
-                      {recipe.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.recipeMeta,
-                        { fontFamily: "Inter_400Regular" },
-                      ]}
-                    >
-                      {recipe.cooking_time || 30} mins • {recipe.cuisine}
-                    </Text>
-                    <View style={styles.recipeStats}>
-                      <Text
-                        style={[
-                          styles.rating,
-                          { fontFamily: "Inter_400Regular" },
-                        ]}
-                      >
-                        ⭐ {recipe.average_rating || 0}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.ingredients,
-                          { fontFamily: "Inter_400Regular" },
-                        ]}
-                      >
-                        {recipe.ingredients?.length || 0} ingredients
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                  {regenerateSuggestionsMutation.isPending || todaySuggestionsLoading ? "..." : "↻"}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
+
+            {/* Category Filters */}
+            {todaySuggestions && todaySuggestions.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryFilterScroller}
+                contentContainerStyle={styles.categoryFilterContent}
+              >
+                {[
+                  { id: "all", name: "All", emoji: "🍽️" },
+                  { id: "breakfast", name: "Breakfast", emoji: "🍳" },
+                  { id: "lunch", name: "Lunch", emoji: "🥗" },
+                  { id: "dinner", name: "Dinner", emoji: "🍽️" },
+                  { id: "dessert", name: "Dessert", emoji: "🍰" },
+                  { id: "snack", name: "Snack", emoji: "🍿" },
+                ].map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryFilterPill,
+                      suggestionCategory === category.id && styles.categoryFilterPillActive,
+                    ]}
+                    onPress={() => {
+                      setSuggestionCategory(category.id);
+                      if (Platform.OS !== "web") {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }
+                    }}
+                  >
+                    <Text style={styles.categoryFilterEmoji}>{category.emoji}</Text>
+                    <Text
+                      style={[
+                        styles.categoryFilterText,
+                        { fontFamily: "Inter_600SemiBold" },
+                        suggestionCategory === category.id && styles.categoryFilterTextActive,
+                      ]}
+                    >
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* Loading State with Progress Indicator */}
+            {todaySuggestionsLoading ? (
+              <View style={styles.suggestionsLoadingContainer}>
+                <ActivityIndicator size="large" color="#FF9F1C" />
+                <Text
+                  style={[
+                    styles.suggestionsLoadingText,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  Generating personalized recipes for you...
+                </Text>
+                <Text
+                  style={[
+                    styles.suggestionsLoadingSubtext,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  This may take 10-20 seconds
+                </Text>
+              </View>
+            ) : filteredSuggestions && filteredSuggestions.length > 0 ? (
+              <View style={styles.suggestionsGrid}>
+                {filteredSuggestions.map((recipe, index) => (
+                  <TouchableOpacity
+                    key={recipe.id}
+                    style={[
+                      styles.suggestionCard,
+                      { marginRight: index % 2 === 0 ? 12 : 0 },
+                    ]}
+                    onPress={() => handleRecipePress(recipe)}
+                    onLongPress={(e) => handleLongPress(recipe, e)}
+                  >
+                    {/* Recipe Image */}
+                    {recipe.image_url ? (
+                      <Image
+                        source={{ uri: recipe.image_url }}
+                        style={styles.suggestionImage}
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    ) : (
+                      <View style={styles.suggestionImagePlaceholder}>
+                        <Text style={styles.suggestionPlaceholderEmoji}>🍽️</Text>
+                      </View>
+                    )}
+                    
+                    {/* Recipe Content */}
+                    <View style={styles.suggestionCardContent}>
+                      <Text
+                        style={[
+                          styles.suggestionTitle,
+                          { fontFamily: "Inter_600SemiBold" },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {recipe.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.suggestionMeta,
+                          { fontFamily: "Inter_400Regular" },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {recipe.cooking_time || 30} mins • {recipe.cuisine || "International"}
+                      </Text>
+                      <View style={styles.recipeStats}>
+                        <Text
+                          style={[
+                            styles.rating,
+                            { fontFamily: "Inter_400Regular" },
+                          ]}
+                        >
+                          ⭐ {recipe.average_rating || 4.0}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.ingredients,
+                            { fontFamily: "Inter_400Regular" },
+                          ]}
+                        >
+                          {recipe.ingredients?.length || 0} ingredients
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : todaySuggestions && todaySuggestions.length === 0 ? (
+              <View style={styles.suggestionsEmptyContainer}>
+                <Text
+                  style={[
+                    styles.suggestionsEmptyText,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  No suggestions available. Pull to refresh.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.suggestionsEmptyContainer}>
+                <Text
+                  style={[
+                    styles.suggestionsEmptyText,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  No {suggestionCategory !== "all" ? suggestionCategory : ""} suggestions found. Try another category.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
+
+      {/* Long Press Modal for Quick Actions */}
+      <Modal
+        visible={longPressModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeLongPressModal}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={closeLongPressModal}
+        >
+          <View
+            style={[
+              styles.longPressModal,
+              {
+                top: Math.min(selectedRecipePosition.y, screenWidth * 0.6),
+                left: Math.max(16, Math.min(selectedRecipePosition.x - 100, screenWidth - 216)),
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedRecipe?.name}
+              </Text>
+              <TouchableOpacity
+                onPress={closeLongPressModal}
+                style={styles.modalCloseButton}
+              >
+                <X size={20} color="#666666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalActionButton}
+                onPress={handleFavoriteFromModal}
+                disabled={favoriteRecipeMutation.isPending}
+              >
+                <Heart 
+                  size={20} 
+                  color="#FF9F1C" 
+                  fill="#FF9F1C"
+                />
+                <Text
+                  style={[
+                    styles.modalActionText,
+                    { fontFamily: "Inter_500Medium", color: "#FF9F1C" },
+                  ]}
+                >
+                  {favoriteRecipeMutation.isPending ? "Saving..." : "Save"}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalDivider} />
+
+              <TouchableOpacity
+                style={styles.modalActionButton}
+                onPress={handleDislikeFromModal}
+                disabled={dislikeRecipeMutation.isPending}
+              >
+                <Text style={styles.modalActionIcon}>👎</Text>
+                <Text
+                  style={[
+                    styles.modalActionText,
+                    { fontFamily: "Inter_500Medium", color: "#666666" },
+                  ]}
+                >
+                  {dislikeRecipeMutation.isPending ? "Saving..." : "Don't like"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
     </>
   );
@@ -689,14 +1028,40 @@ const styles = StyleSheet.create({
   promoEmoji: {
     fontSize: 40,
   },
-  categoryScroller: {
+  suggestionsSection: {
     marginTop: 24,
     marginBottom: 20,
   },
-  categoryContent: {
+  suggestionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  suggestionsTitle: {
+    fontSize: 22,
+    color: "#000000",
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F8F8F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  refreshButtonText: {
+    fontSize: 18,
+    color: "#000000",
+  },
+  categoryFilterScroller: {
+    marginBottom: 16,
+  },
+  categoryFilterContent: {
     paddingRight: 16,
   },
-  categoryPill: {
+  categoryFilterPill: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8F8F8",
@@ -705,29 +1070,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 12,
   },
-  categoryPillActive: {
+  categoryFilterPillActive: {
     backgroundColor: "#000000",
   },
-  categoryEmoji: {
+  categoryFilterEmoji: {
     fontSize: 16,
     marginRight: 6,
   },
-  categoryText: {
+  categoryFilterText: {
     fontSize: 14,
     color: "#666666",
   },
-  categoryTextActive: {
+  categoryFilterTextActive: {
     color: "#FFFFFF",
   },
-  recipeFeed: {
-    marginTop: 8,
-  },
-  recipeGrid: {
+  suggestionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
   },
-  recipeCard: {
+  suggestionCard: {
     width: cardWidth,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -739,32 +1101,32 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  recipeImage: {
+  suggestionImage: {
     width: "100%",
     height: 140,
     backgroundColor: "#F8F9FA",
   },
-  recipeImagePlaceholder: {
+  suggestionImagePlaceholder: {
     width: "100%",
     height: 140,
     backgroundColor: "#F8F9FA",
     justifyContent: "center",
     alignItems: "center",
   },
-  placeholderEmoji: {
+  suggestionPlaceholderEmoji: {
     fontSize: 48,
     opacity: 0.3,
   },
-  recipeCardContent: {
+  suggestionCardContent: {
     padding: 12,
   },
-  recipeTitle: {
+  suggestionTitle: {
     fontSize: 16,
     color: "#000000",
     marginBottom: 8,
     lineHeight: 22,
   },
-  recipeMeta: {
+  suggestionMeta: {
     fontSize: 12,
     color: "#666666",
     marginBottom: 8,
@@ -782,10 +1144,91 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666666",
   },
-  loadingText: {
-    textAlign: "center",
+  suggestionsLoadingContainer: {
+    paddingVertical: 60,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  suggestionsLoadingText: {
     fontSize: 16,
+    color: "#000000",
+    textAlign: "center",
+    marginTop: 16,
+    fontWeight: "500",
+  },
+  suggestionsLoadingSubtext: {
+    fontSize: 14,
     color: "#666666",
-    marginTop: 32,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  suggestionsEmptyContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  suggestionsEmptyText: {
+    fontSize: 14,
+    color: "#999999",
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  longPressModal: {
+    position: "absolute",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    minWidth: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    color: "#000000",
+    flex: 1,
+    marginRight: 8,
+  },
+  modalCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F8F8F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalActions: {
+    gap: 0,
+  },
+  modalActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 12,
+  },
+  modalActionIcon: {
+    fontSize: 20,
+  },
+  modalActionText: {
+    fontSize: 16,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: "#F0F0F0",
+    marginVertical: 4,
   },
 });

@@ -161,6 +161,16 @@ CREATE TABLE IF NOT EXISTS meal_tracking (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- User daily suggestions (AI-generated recipe suggestions per day)
+CREATE TABLE IF NOT EXISTS user_daily_suggestions (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  generated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, date, recipe_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes(category);
 CREATE INDEX IF NOT EXISTS idx_recipes_cuisine ON recipes(cuisine);
@@ -170,4 +180,5 @@ CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, date)
 CREATE INDEX IF NOT EXISTS idx_grocery_lists_user ON grocery_lists(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_recommendations_user_date ON daily_recommendations(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_meal_tracking_user_date ON meal_tracking(user_id, cooked_date);
+CREATE INDEX IF NOT EXISTS idx_user_daily_suggestions_user_date ON user_daily_suggestions(user_id, date);
 

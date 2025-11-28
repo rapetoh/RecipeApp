@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -29,12 +29,22 @@ export default function SavedRecipesScreen() {
   const router = useRouter();
   const { isAuthenticated, signIn, auth } = useAuth();
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
   });
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchText);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   // Fetch saved recipes with proper error handling
   const {
@@ -43,14 +53,14 @@ export default function SavedRecipesScreen() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["saved-recipes", auth?.user?.id, searchText],
+    queryKey: ["saved-recipes", auth?.user?.id, debouncedSearch],
     queryFn: async () => {
       if (!auth?.user?.id) {
         throw new Error("User not authenticated");
       }
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const searchParam = searchText ? `&search=${encodeURIComponent(searchText)}` : "";
+      const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
       const response = await fetch(`${apiUrl}/api/saved-recipes?userId=${auth.user.id}${searchParam}`);
 
       if (!response.ok) {
@@ -289,13 +299,13 @@ export default function SavedRecipesScreen() {
             <Text
               style={[styles.emptyTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              {searchText ? "No Results Found" : "No Saved Recipes"}
+              {debouncedSearch ? "No Results Found" : "No Saved Recipes"}
             </Text>
             <Text
               style={[styles.emptyText, { fontFamily: "Inter_400Regular" }]}
             >
-              {searchText 
-                ? `No saved recipes match your search "${searchText}"`
+              {debouncedSearch 
+                ? `No saved recipes match your search "${debouncedSearch}"`
                 : "Save recipes to see them here"
               }
             </Text>
@@ -308,7 +318,7 @@ export default function SavedRecipesScreen() {
               >
                 {savedRecipes.length} saved recipe
                 {savedRecipes.length !== 1 ? "s" : ""}
-                {searchText && ` (filtered)`}
+                {debouncedSearch && ` (filtered)`}
               </Text>
             </View>
 

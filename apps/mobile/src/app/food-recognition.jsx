@@ -12,6 +12,7 @@ import {
   Keyboard,
   Dimensions,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -27,7 +28,6 @@ import {
   ChevronLeft,
   Camera,
   ImageIcon,
-  Loader,
   Search,
   Type,
   Sparkles,
@@ -575,7 +575,7 @@ export default function FoodRecognitionScreen() {
 
                     {isLoading && (
                       <View style={styles.loadingOverlay}>
-                        <Loader size={32} color="#FFFFFF" />
+                        <ActivityIndicator size="large" color="#FFFFFF" />
                         <Text
                           style={[
                             styles.loadingText,
@@ -641,7 +641,7 @@ export default function FoodRecognitionScreen() {
                   disabled={isLoading || !searchText.trim()}
                 >
                   {isLoading ? (
-                    <Loader size={20} color="#FFFFFF" />
+                    <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <Search size={20} color="#FFFFFF" />
                   )}
@@ -898,7 +898,7 @@ export default function FoodRecognitionScreen() {
                   >
                     {isSavingRecipe ? (
                       <>
-                        <Loader size={18} color="#FFFFFF" />
+                        <ActivityIndicator size="small" color="#FFFFFF" />
                         <Text
                           style={[
                             styles.recipeButtonText,

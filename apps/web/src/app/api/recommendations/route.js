@@ -77,7 +77,7 @@ export async function GET(request) {
       `,
       sql`
         SELECT r.name, r.cuisine, r.category, mt.liked, mt.cooked_date,
-               EXTRACT(days FROM (${date}::date - mt.cooked_date)) as days_ago
+               (${date}::date - mt.cooked_date) as days_ago
         FROM meal_tracking mt
         JOIN recipes r ON mt.recipe_id = r.id
         WHERE mt.user_id = ${userId}::uuid 
