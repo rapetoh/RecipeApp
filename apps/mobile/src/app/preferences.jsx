@@ -1230,6 +1230,44 @@ export default function PreferencesScreen() {
           </View>
         </View>
 
+        {/* Advanced Preferences Link */}
+        <View style={styles.advancedSection}>
+          <TouchableOpacity
+            style={styles.advancedButton}
+            onPress={() => {
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push("/advanced-preferences");
+            }}
+          >
+            <View style={styles.advancedButtonContent}>
+              <View style={styles.advancedIcon}>
+                <Sliders size={20} color="#8B5CF6" />
+              </View>
+              <View style={styles.advancedText}>
+                <Text
+                  style={[
+                    styles.advancedTitle,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Advanced Preferences
+                </Text>
+                <Text
+                  style={[
+                    styles.advancedSubtitle,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  Manage diet types, allergies, cuisines, and more
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.advancedArrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Save Button */}
         <View style={styles.saveSection}>
           <TouchableOpacity
@@ -1758,5 +1796,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E8E8E8",
     marginTop: 8,
+  },
+  advancedSection: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  advancedButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: "#8B5CF6",
+  },
+  advancedButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  advancedIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#F3F3FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  advancedText: {
+    flex: 1,
+  },
+  advancedTitle: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 4,
+  },
+  advancedSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  advancedArrow: {
+    fontSize: 24,
+    color: "#8B5CF6",
+    fontWeight: "bold",
   },
 });

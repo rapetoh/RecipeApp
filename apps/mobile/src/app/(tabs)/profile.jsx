@@ -27,6 +27,9 @@ import {
   ChefHat,
   LogOut,
   Star,
+  Calendar,
+  ShoppingCart,
+  DollarSign,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
@@ -95,7 +98,19 @@ export default function ProfileScreen() {
         router.push("/preferences");
         break;
       case "notifications":
-        Alert.alert("Notifications", "No new notifications");
+        router.push("/notification-center");
+        break;
+      case "advanced-preferences":
+        router.push("/advanced-preferences");
+        break;
+      case "meal-plan-history":
+        router.push("/meal-plan-history");
+        break;
+      case "grocery-lists":
+        router.push("/grocery-lists");
+        break;
+      case "food-budget":
+        router.push("/food-budget");
         break;
       default:
         Alert.alert("Coming Soon", "This feature is coming soon!");
@@ -140,11 +155,51 @@ export default function ProfileScreen() {
       requiresAuth: true,
     },
     {
+      id: "meal-plan-history",
+      title: "Meal Plan History",
+      subtitle: "View past meal plans",
+      icon: Calendar,
+      color: "#8B5CF6",
+      requiresAuth: true,
+    },
+    {
+      id: "grocery-lists",
+      title: "Grocery Lists",
+      subtitle: "Manage your shopping lists",
+      icon: ShoppingCart,
+      color: "#22C55E",
+      requiresAuth: true,
+    },
+    {
+      id: "food-budget",
+      title: "Food Budget",
+      subtitle: "Track your spending",
+      icon: DollarSign,
+      color: "#F59E0B",
+      requiresAuth: true,
+    },
+    {
       id: "settings",
       title: "Preferences",
       subtitle: "Food & meal settings",
       icon: Settings,
       color: "#607D8B",
+      requiresAuth: false,
+    },
+    {
+      id: "advanced-preferences",
+      title: "Advanced Preferences",
+      subtitle: "Detailed diet & allergy settings",
+      icon: Settings,
+      color: "#8B5CF6",
+      requiresAuth: false,
+    },
+    {
+      id: "notifications",
+      title: "Notifications",
+      subtitle: "Manage reminders & alerts",
+      icon: Bell,
+      color: "#6366F1",
       requiresAuth: false,
     },
   ];

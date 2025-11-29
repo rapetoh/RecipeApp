@@ -57,7 +57,7 @@ export async function GET(request) {
         END
       `;
     } else {
-      // Get meal plans for current week
+      // Get ALL meal plans for user (no date restrictions)
       mealPlans = await sql`
         SELECT 
           mp.id, mp.date, mp.meal_type,
@@ -65,9 +65,7 @@ export async function GET(request) {
           r.difficulty, r.estimated_cost, r.average_rating
         FROM meal_plans mp
         JOIN recipes r ON mp.recipe_id = r.id
-        WHERE mp.user_id = ${userId}::uuid 
-          AND mp.date >= CURRENT_DATE - INTERVAL '7 days'
-          AND mp.date <= CURRENT_DATE + INTERVAL '7 days'
+        WHERE mp.user_id = ${userId}::uuid
         ORDER BY mp.date ASC, 
           CASE mp.meal_type 
             WHEN 'breakfast' THEN 1 

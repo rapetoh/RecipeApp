@@ -28,6 +28,7 @@ import {
   CheckCircle,
   Clock,
   MoreVertical,
+  History,
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -528,15 +529,29 @@ export default function MealPlanningScreen() {
         <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
           Meal Planning
         </Text>
-        {isAuthenticated && (
+        {isAuthenticated ? (
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                router.push("/meal-plan-history");
+              }}
+            >
+              <History size={20} color="#8B5CF6" />
+            </TouchableOpacity>
           <TouchableOpacity
             style={styles.calendarButton}
             onPress={() => router.push("/meal-calendar?returnTo=meal-planning")}
           >
             <Calendar size={20} color="#FF9F1C" />
           </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.placeholder} />
         )}
-        {!isAuthenticated && <View style={styles.placeholder} />}
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -812,6 +827,19 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 38,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  historyButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F3FF",
+    justifyContent: "center",
+    alignItems: "center",
   },
   calendarButton: {
     width: 38,
