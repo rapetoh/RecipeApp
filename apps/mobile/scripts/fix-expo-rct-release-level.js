@@ -32,31 +32,8 @@ function fixFile(filePath) {
   const originalContent = content;
   let modified = false;
   
-  // Remove Swift lines that define releaseLevel using RCTReleaseLevel
-  const releaseLevelPattern = /(\s+)let releaseLevel = \(Bundle\.main\.object\(forInfoDictionaryKey: "ReactNativeReleaseLevel"\) as\? String\)\s+\.flatMap \{ \[[\s\S]*?\}\s+\?\? RCTReleaseLevel\.Stable\s*/;
-  
-  if (releaseLevelPattern.test(content)) {
-    content = content.replace(releaseLevelPattern, '');
-    modified = true;
-  }
-  
-  // Remove Objective-C variable declarations with RCTReleaseLevel
-  // Pattern: RCTReleaseLevel releaseLevel = RCTReleaseLevel.Stable;
-  const objcVarPattern = /RCTReleaseLevel\s+releaseLevel\s*=\s*RCTReleaseLevel\.(Stable|Experimental|Canary)\s*;/g;
-  if (objcVarPattern.test(content)) {
-    content = content.replace(objcVarPattern, '');
-    modified = true;
-  }
-  
-  // Remove Objective-C enum references (RCTReleaseLevel.Canary, etc.)
-  const enumPattern = /RCTReleaseLevel\.(Stable|Experimental|Canary)/g;
-  if (enumPattern.test(content)) {
-    content = content.replace(enumPattern, '');
-    modified = true;
-  }
-  
-  // Fix Swift style super.init call to remove releaseLevel parameter (MUST be before other patterns)
-  // This handles: super.init(delegate: delegate, releaseLevel: releaseLevel)
+  // First, fix the super.init call to remove releaseLevel parameter (do this FIRST)
+  // Handle: super.init(delegate: delegate, releaseLevel: releaseLevel)
   if (content.includes('super.init(delegate: delegate, releaseLevel: releaseLevel)')) {
     content = content.replace(
       /super\.init\(delegate:\s*delegate,\s*releaseLevel:\s*releaseLevel\)/g,
@@ -72,8 +49,59 @@ function fixFile(filePath) {
     modified = true;
   }
   
-  // Fix Objective-C method calls with releaseLevel parameter
-  // Pattern: [factory initWithDelegate:delegate releaseLevel:releaseLevel]
+  // Now remove the releaseLevel variable declaration block (more carefully using line-by-line)
+  // This is safer than regex which might remove too much
+  const lines = content.split('\n');
+  let newLines = [];
+  let inReleaseLevelBlock = false;
+  let blockStartIndex = -1;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Check if this line starts the releaseLevel declaration
+    if (line.includes('let releaseLevel = (Bundle.main.object(forInfoDictionaryKey: "ReactNativeReleaseLevel")')) {
+      inReleaseLevelBlock = true;
+      blockStartIndex = i;
+      // Skip this line
+      continue;
+    }
+    
+    // If we're in the releaseLevel block, skip lines until we find the ?? RCTReleaseLevel.Stable line
+    if (inReleaseLevelBlock) {
+      if (line.includes('?? RCTReleaseLevel.Stable')) {
+        inReleaseLevelBlock = false;
+        // Skip this line too
+        continue;
+      }
+      // Skip all lines in between
+      continue;
+    }
+    
+    newLines.push(line);
+  }
+  
+  // If we removed lines, update content
+  if (newLines.length !== lines.length) {
+    content = newLines.join('\n');
+    modified = true;
+  }
+  
+  // Remove Objective-C variable declarations with RCTReleaseLevel
+  const objcVarPattern = /RCTReleaseLevel\s+releaseLevel\s*=\s*RCTReleaseLevel\.(Stable|Experimental|Canary)\s*;/g;
+  if (objcVarPattern.test(content)) {
+    content = content.replace(objcVarPattern, '');
+    modified = true;
+  }
+  
+  // Remove Objective-C enum references
+  const enumPattern = /RCTReleaseLevel\.(Stable|Experimental|Canary)/g;
+  if (enumPattern.test(content)) {
+    content = content.replace(enumPattern, '');
+    modified = true;
+  }
+  
+  // Fix Objective-C method calls
   const objcMethodPattern = /\[([^\]]+)\s+initWithDelegate:\s*([^\s]+)\s+releaseLevel:\s*([^\]]+)\]/g;
   if (objcMethodPattern.test(content)) {
     content = content.replace(objcMethodPattern, '[$1 initWithDelegate:$2]');
@@ -87,28 +115,17 @@ function fixFile(filePath) {
     modified = true;
   }
   
-  // Remove any remaining releaseLevel: parameter from method calls (be careful with commas)
-  // This pattern removes ", releaseLevel: value" including the comma before it
+  // Remove any remaining releaseLevel: parameter (with comma)
   const remainingReleaseLevelPattern = /,\s*releaseLevel:\s*[^,\])]+/g;
   if (remainingReleaseLevelPattern.test(content)) {
     content = content.replace(remainingReleaseLevelPattern, '');
     modified = true;
   }
   
-  // Clean up any double spaces, commas, or brackets left behind
+  // Clean up
   content = content.replace(/,\s*,/g, ',');
   content = content.replace(/\[\s*\]/g, '[]');
   content = content.replace(/\s{2,}/g, ' ');
-  
-  // Remove any standalone references to releaseLevel variable (but keep ReactNativeReleaseLevel string keys)
-  if (content.includes('releaseLevel') && !content.includes('ReactNativeReleaseLevel')) {
-    // Remove lines that just reference releaseLevel variable assignment
-    const standalonePattern = /^\s*releaseLevel\s*=[^;]+;?\s*$/gm;
-    if (standalonePattern.test(content)) {
-      content = content.replace(standalonePattern, '');
-      modified = true;
-    }
-  }
   
   if (modified) {
     fs.writeFileSync(filePath, content, 'utf8');
