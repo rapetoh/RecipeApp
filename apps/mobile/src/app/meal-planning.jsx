@@ -19,7 +19,6 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import {
-  ChevronLeft,
   Calendar,
   Plus,
   Coffee,
@@ -253,12 +252,12 @@ export default function MealPlanningScreen() {
 
   // Remove meal mutation
   const removeMealMutation = useMutation({
-    mutationFn: async ({ date, mealType }) => {
+    mutationFn: async ({ mealPlanId }) => {
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      console.log('Removing meal:', { date, mealType, userId: auth?.user?.id });
+      console.log('Removing meal:', { mealPlanId, userId: auth?.user?.id });
       
       const response = await fetch(
-        `${apiUrl}/api/meal-plans?userId=${auth?.user?.id}&date=${date}&mealType=${mealType}`,
+        `${apiUrl}/api/meal-plans?userId=${auth?.user?.id}&id=${mealPlanId}`,
         { method: "DELETE" }
       );
 
@@ -313,8 +312,8 @@ export default function MealPlanningScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
 
-      const estimatedCost = data.data.estimated_cost || 0;
-      const itemCount = data.data.items ? data.data.items.length : 0;
+      const estimatedCost = Number(data.data?.estimated_cost) || 0;
+      const itemCount = data.data?.items ? (Array.isArray(data.data.items) ? data.data.items.length : 0) : 0;
 
       Alert.alert(
         "Grocery List Generated!",
@@ -327,12 +326,6 @@ export default function MealPlanningScreen() {
     },
   });
 
-  const handleBackPress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.back();
-  };
 
   const handleDateSelect = (date) => {
     setSelectedDate(date);
@@ -394,10 +387,10 @@ export default function MealPlanningScreen() {
     });
   };
 
-  const handleRemoveMeal = (date, mealType) => {
+  const handleRemoveMeal = (mealPlanId, recipeName) => {
     Alert.alert(
       "Remove Meal",
-      "Are you sure you want to remove this meal from your plan?",
+      `Are you sure you want to remove "${recipeName}" from your plan?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -405,8 +398,7 @@ export default function MealPlanningScreen() {
           style: "destructive",
           onPress: () => {
             removeMealMutation.mutate({
-              date: date.toISOString().split("T")[0],
-              mealType,
+              mealPlanId,
             });
           },
         },
@@ -448,25 +440,14 @@ export default function MealPlanningScreen() {
     );
   };
 
-  const getMealForSlot = (date, mealType) => {
-    if (!mealPlans?.data) return null;
+  const getMealsForSlot = (date, mealType) => {
+    if (!mealPlans?.data) return [];
 
     const dateStr = date.toISOString().split("T")[0];
-    console.log('🔍 Looking for meal:', { dateStr, mealType });
-    console.log('📋 Available meals:', mealPlans.data.map(p => ({
-      date: p.date,
-      dateOnly: p.date.split("T")[0],
-      meal_type: p.meal_type,
-      recipe_name: p.recipe_name
-    })));
     
-    return mealPlans.data.find((plan) => {
+    return mealPlans.data.filter((plan) => {
       const planDateStr = plan.date.split("T")[0]; // Extract date part from ISO string
-      const matches = planDateStr === dateStr && plan.meal_type === mealType;
-      if (matches) {
-        console.log('✅ Found matching meal:', plan);
-      }
-      return matches;
+      return planDateStr === dateStr && plan.meal_type === mealType;
     });
   };
 
@@ -523,9 +504,7 @@ export default function MealPlanningScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-          <ChevronLeft size={22} color="#000000" />
-        </TouchableOpacity>
+        <View style={styles.headerLeft} />
         <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
           Meal Planning
         </Text>
@@ -540,7 +519,7 @@ export default function MealPlanningScreen() {
                 router.push("/meal-plan-history");
               }}
             >
-              <History size={20} color="#8B5CF6" />
+              <History size={20} color="#FF9F1C" />
             </TouchableOpacity>
           <TouchableOpacity
             style={styles.calendarButton}
@@ -550,7 +529,7 @@ export default function MealPlanningScreen() {
           </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.placeholder} />
+          <View style={styles.headerRight} />
         )}
       </View>
 
@@ -647,7 +626,7 @@ export default function MealPlanningScreen() {
           </Text>
 
           {["breakfast", "lunch", "dinner"].map((mealType) => {
-            const meal = getMealForSlot(selectedDate, mealType);
+            const meals = getMealsForSlot(selectedDate, mealType);
 
             return (
               <View key={mealType} style={styles.mealSlot}>
@@ -662,6 +641,16 @@ export default function MealPlanningScreen() {
                     >
                       {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
                     </Text>
+                    {meals.length > 0 && (
+                      <Text
+                        style={[
+                          styles.mealCount,
+                          { fontFamily: "Inter_400Regular" },
+                        ]}
+                      >
+                        ({meals.length})
+                      </Text>
+                    )}
                   </View>
 
                   {isAuthenticated && (
@@ -679,44 +668,46 @@ export default function MealPlanningScreen() {
                   )}
                 </View>
 
-                {meal ? (
-                  <TouchableOpacity
-                    style={styles.plannedMeal}
-                    onPress={() =>
-                      router.push(`/recipe-detail?id=${meal.recipe_id}`)
-                    }
-                    onLongPress={() =>
-                      handleRemoveMeal(selectedDate, mealType)
-                    }
-                  >
-                    <View style={styles.mealInfo}>
-                      <Text
-                        style={[
-                          styles.mealName,
-                          { fontFamily: "Inter_600SemiBold" },
-                        ]}
-                      >
-                        {meal.recipe_name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.mealMeta,
-                          { fontFamily: "Inter_400Regular" },
-                        ]}
-                      >
-                        {meal.cooking_time} mins • {meal.cuisine}
-                      </Text>
-                    </View>
-                    <View style={styles.mealActions}>
-                      <CheckCircle size={20} color="#4CAF50" />
+                {meals.length > 0 ? (
+                  <View style={styles.mealsList}>
+                    {meals.map((meal) => (
                       <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => handleRemoveMeal(selectedDate, mealType)}
+                        key={meal.id}
+                        style={styles.plannedMeal}
+                        onPress={() =>
+                          router.push(`/recipe-detail?id=${meal.recipe_id}`)
+                        }
                       >
-                        <MoreVertical size={18} color="#666666" />
+                        <View style={styles.mealInfo}>
+                          <Text
+                            style={[
+                              styles.mealName,
+                              { fontFamily: "Inter_600SemiBold" },
+                            ]}
+                          >
+                            {meal.recipe_name}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.mealMeta,
+                              { fontFamily: "Inter_400Regular" },
+                            ]}
+                          >
+                            {meal.cooking_time} mins • {meal.cuisine}
+                          </Text>
+                        </View>
+                        <View style={styles.mealActions}>
+                          <CheckCircle size={20} color="#4CAF50" />
+                          <TouchableOpacity
+                            style={styles.removeButton}
+                            onPress={() => handleRemoveMeal(meal.id, meal.recipe_name)}
+                          >
+                            <MoreVertical size={18} color="#666666" />
+                          </TouchableOpacity>
+                        </View>
                       </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
+                    ))}
+                  </View>
                 ) : (
                   <View style={styles.emptyMeal}>
                     <Text
@@ -813,20 +804,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backButton: {
+  headerLeft: {
     width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F3F3F3",
-    justifyContent: "center",
-    alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
     color: "#000000",
-  },
-  placeholder: {
-    width: 38,
   },
   headerRight: {
     flexDirection: "row",
@@ -837,7 +820,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -979,6 +962,11 @@ const styles = StyleSheet.create({
     color: "#000000",
     marginLeft: 8,
   },
+  mealCount: {
+    fontSize: 14,
+    color: "#666666",
+    marginLeft: 6,
+  },
   addButton: {
     width: 32,
     height: 32,
@@ -994,6 +982,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
     padding: 12,
+    marginBottom: 8,
+  },
+  mealsList: {
+    gap: 8,
   },
   mealActions: {
     flexDirection: "row",

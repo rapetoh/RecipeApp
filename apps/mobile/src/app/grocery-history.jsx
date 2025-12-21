@@ -240,7 +240,7 @@ export default function GroceryHistoryScreen() {
           {/* List Summary */}
           <View style={styles.listSummaryCard}>
             <View style={styles.summaryHeader}>
-              <ShoppingCart size={24} color="#8B5CF6" />
+              <ShoppingCart size={24} color="#FF9F1C" />
               <View style={styles.summaryInfo}>
                 <Text
                   style={[
@@ -389,14 +389,14 @@ export default function GroceryHistoryScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={refetch}
-            colors={["#8B5CF6"]}
-            tintColor="#8B5CF6"
+            colors={["#FF9F1C"]}
+            tintColor="#FF9F1C"
           />
         }
       >
         {!isAuthenticated ? (
           <View style={styles.authPrompt}>
-            <ShoppingCart size={48} color="#8B5CF6" />
+            <ShoppingCart size={48} color="#FF9F1C" />
             <Text style={[styles.authTitle, { fontFamily: "Inter_700Bold" }]}>
               View Your History
             </Text>
@@ -436,7 +436,7 @@ export default function GroceryHistoryScreen() {
                     >
                       <ShoppingCart
                         size={20}
-                        color={isRecent ? "#8B5CF6" : "#666666"}
+                        color={isRecent ? "#FF9F1C" : "#666666"}
                       />
                     </View>
                     <View style={styles.listCardInfo}>
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   authButton: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
     borderRadius: 12,
     paddingHorizontal: 32,
     paddingVertical: 16,
@@ -698,8 +698,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   listCardRecent: {
-    borderColor: "#8B5CF6",
-    backgroundColor: "#FAFBFF",
+    borderColor: "#FF9F1C",
+    backgroundColor: "#FFF5E6",
   },
   listCardLeft: {
     flexDirection: "row",
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   listIconRecent: {
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
   },
   listCardInfo: {
     flex: 1,
@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: 12,
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,

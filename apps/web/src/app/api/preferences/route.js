@@ -39,18 +39,54 @@ export async function GET(request) {
     }
 
     // Check if apply_preferences_in_assistant column exists
-    const columnExists = await sql`
+    const applyPrefsColumnCheck = await sql`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'users' 
       AND column_name = 'apply_preferences_in_assistant'
     `;
-    const hasApplyPreferencesColumn = columnExists.length > 0;
+    const hasApplyPreferencesColumn = applyPrefsColumnCheck.length > 0;
 
-    // Get user preferences from users table
-    // Conditionally include apply_preferences_in_assistant if column exists
+    // Check if budget columns exist
+    const budgetColumnsCheck = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('budget_amount', 'budget_period')
+    `;
+    const hasBudgetColumns = budgetColumnsCheck.length === 2;
+
+    // Build SELECT query based on column existence
     let userPrefs;
-    if (hasApplyPreferencesColumn) {
+    if (hasApplyPreferencesColumn && hasBudgetColumns) {
+      // All columns exist
+      userPrefs = await sql`
+        SELECT 
+          id,
+          diet_type,
+          allergies,
+          dislikes,
+          preferred_cuisines,
+          experience_level,
+          cooking_schedule,
+          goals,
+          cooking_skill,
+          preferred_cooking_time,
+          people_count,
+          daily_suggestion_enabled,
+          daily_suggestion_time,
+          weekly_plan_enabled,
+          weekly_plan_days,
+          measurement_system,
+          onboarding_completed,
+          apply_preferences_in_assistant,
+          budget_amount,
+          budget_period
+        FROM users
+        WHERE id = ${userId}::uuid
+      `;
+    } else if (hasApplyPreferencesColumn && !hasBudgetColumns) {
+      // Only apply_preferences_in_assistant exists
       userPrefs = await sql`
         SELECT 
           id,
@@ -74,7 +110,34 @@ export async function GET(request) {
         FROM users
         WHERE id = ${userId}::uuid
       `;
+    } else if (!hasApplyPreferencesColumn && hasBudgetColumns) {
+      // Only budget columns exist
+      userPrefs = await sql`
+        SELECT 
+          id,
+          diet_type,
+          allergies,
+          dislikes,
+          preferred_cuisines,
+          experience_level,
+          cooking_schedule,
+          goals,
+          cooking_skill,
+          preferred_cooking_time,
+          people_count,
+          daily_suggestion_enabled,
+          daily_suggestion_time,
+          weekly_plan_enabled,
+          weekly_plan_days,
+          measurement_system,
+          onboarding_completed,
+          budget_amount,
+          budget_period
+        FROM users
+        WHERE id = ${userId}::uuid
+      `;
     } else {
+      // Neither column exists
       userPrefs = await sql`
         SELECT 
           id,
@@ -131,6 +194,8 @@ export async function GET(request) {
       applyPreferencesInAssistant: hasApplyPreferencesColumn 
         ? (prefs.apply_preferences_in_assistant !== false) 
         : true, // Default to true if column doesn't exist yet
+      budgetAmount: hasBudgetColumns && prefs.budget_amount ? Number(prefs.budget_amount) : null,
+      budgetPeriod: hasBudgetColumns && prefs.budget_period ? prefs.budget_period : null,
     };
 
     return Response.json({
@@ -174,13 +239,22 @@ export async function POST(request) {
     }
 
     // Check if apply_preferences_in_assistant column exists
-    const columnExists = await sql`
+    const applyPrefsColumnCheck = await sql`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'users' 
       AND column_name = 'apply_preferences_in_assistant'
     `;
-    const hasApplyPreferencesColumn = columnExists.length > 0;
+    const hasApplyPreferencesColumn = applyPrefsColumnCheck.length > 0;
+
+    // Check if budget columns exist
+    const budgetColumnsCheck = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name IN ('budget_amount', 'budget_period')
+    `;
+    const hasBudgetColumns = budgetColumnsCheck.length === 2;
 
     // Transform frontend format to database format
     // diet_type is TEXT[] in DB, so wrap string in array (or null)
@@ -211,21 +285,62 @@ export async function POST(request) {
       preferencesData.apply_preferences_in_assistant = body.applyPreferencesInAssistant !== false;
     }
 
+    // Only add budget fields if columns exist
+    if (hasBudgetColumns) {
+      preferencesData.budget_amount = body.budgetAmount !== undefined && body.budgetAmount !== null ? body.budgetAmount : null;
+      preferencesData.budget_period = body.budgetPeriod || null;
+    }
+
     // Check if user preferences row exists
     const existingPrefs = await sql`
       SELECT id FROM users WHERE id = ${userId}::uuid
     `;
 
     if (existingPrefs.length === 0) {
-      // Insert new preferences
-      if (hasApplyPreferencesColumn) {
+      // Insert new preferences - use conditional queries based on column existence
+      if (hasApplyPreferencesColumn && hasBudgetColumns) {
         await sql`
           INSERT INTO users (
             id, diet_type, allergies, dislikes, preferred_cuisines,
             experience_level, goals, cooking_skill, preferred_cooking_time,
             people_count, daily_suggestion_enabled, daily_suggestion_time,
             weekly_plan_days, weekly_plan_enabled, measurement_system,
-            onboarding_completed, apply_preferences_in_assistant, created_at, updated_at
+            onboarding_completed, apply_preferences_in_assistant,
+            budget_amount, budget_period, created_at, updated_at
+          )
+          VALUES (
+            ${userId}::uuid,
+            ${preferencesData.diet_type},
+            ${preferencesData.allergies},
+            ${preferencesData.dislikes},
+            ${preferencesData.preferred_cuisines},
+            ${preferencesData.experience_level},
+            ${preferencesData.goals},
+            ${preferencesData.cooking_skill},
+            ${preferencesData.preferred_cooking_time},
+            ${preferencesData.people_count},
+            ${preferencesData.daily_suggestion_enabled},
+            ${preferencesData.daily_suggestion_time},
+            ${preferencesData.weekly_plan_days},
+            ${preferencesData.weekly_plan_enabled},
+            ${preferencesData.measurement_system},
+            ${preferencesData.onboarding_completed},
+            ${preferencesData.apply_preferences_in_assistant},
+            ${preferencesData.budget_amount},
+            ${preferencesData.budget_period},
+            NOW(),
+            NOW()
+          )
+        `;
+      } else if (hasApplyPreferencesColumn && !hasBudgetColumns) {
+        await sql`
+          INSERT INTO users (
+            id, diet_type, allergies, dislikes, preferred_cuisines,
+            experience_level, goals, cooking_skill, preferred_cooking_time,
+            people_count, daily_suggestion_enabled, daily_suggestion_time,
+            weekly_plan_days, weekly_plan_enabled, measurement_system,
+            onboarding_completed, apply_preferences_in_assistant,
+            created_at, updated_at
           )
           VALUES (
             ${userId}::uuid,
@@ -249,8 +364,40 @@ export async function POST(request) {
             NOW()
           )
         `;
+      } else if (!hasApplyPreferencesColumn && hasBudgetColumns) {
+        await sql`
+          INSERT INTO users (
+            id, diet_type, allergies, dislikes, preferred_cuisines,
+            experience_level, goals, cooking_skill, preferred_cooking_time,
+            people_count, daily_suggestion_enabled, daily_suggestion_time,
+            weekly_plan_days, weekly_plan_enabled, measurement_system,
+            onboarding_completed, budget_amount, budget_period,
+            created_at, updated_at
+          )
+          VALUES (
+            ${userId}::uuid,
+            ${preferencesData.diet_type},
+            ${preferencesData.allergies},
+            ${preferencesData.dislikes},
+            ${preferencesData.preferred_cuisines},
+            ${preferencesData.experience_level},
+            ${preferencesData.goals},
+            ${preferencesData.cooking_skill},
+            ${preferencesData.preferred_cooking_time},
+            ${preferencesData.people_count},
+            ${preferencesData.daily_suggestion_enabled},
+            ${preferencesData.daily_suggestion_time},
+            ${preferencesData.weekly_plan_days},
+            ${preferencesData.weekly_plan_enabled},
+            ${preferencesData.measurement_system},
+            ${preferencesData.onboarding_completed},
+            ${preferencesData.budget_amount},
+            ${preferencesData.budget_period},
+            NOW(),
+            NOW()
+          )
+        `;
       } else {
-        // Insert without apply_preferences_in_assistant column
         await sql`
           INSERT INTO users (
             id, diet_type, allergies, dislikes, preferred_cuisines,
@@ -282,8 +429,32 @@ export async function POST(request) {
         `;
       }
     } else {
-      // Update existing preferences
-      if (hasApplyPreferencesColumn) {
+      // Update existing preferences - use conditional queries based on column existence
+      if (hasApplyPreferencesColumn && hasBudgetColumns) {
+        await sql`
+          UPDATE users SET
+            diet_type = ${preferencesData.diet_type},
+            allergies = ${preferencesData.allergies},
+            dislikes = ${preferencesData.dislikes},
+            preferred_cuisines = ${preferencesData.preferred_cuisines},
+            experience_level = ${preferencesData.experience_level},
+            goals = ${preferencesData.goals},
+            cooking_skill = ${preferencesData.cooking_skill},
+            preferred_cooking_time = ${preferencesData.preferred_cooking_time},
+            people_count = ${preferencesData.people_count},
+            daily_suggestion_enabled = ${preferencesData.daily_suggestion_enabled},
+            daily_suggestion_time = ${preferencesData.daily_suggestion_time},
+            weekly_plan_enabled = ${preferencesData.weekly_plan_enabled},
+            weekly_plan_days = ${preferencesData.weekly_plan_days},
+            measurement_system = ${preferencesData.measurement_system},
+            onboarding_completed = ${preferencesData.onboarding_completed},
+            apply_preferences_in_assistant = ${preferencesData.apply_preferences_in_assistant},
+            budget_amount = ${preferencesData.budget_amount},
+            budget_period = ${preferencesData.budget_period},
+            updated_at = NOW()
+          WHERE id = ${userId}::uuid
+        `;
+      } else if (hasApplyPreferencesColumn && !hasBudgetColumns) {
         await sql`
           UPDATE users SET
             diet_type = ${preferencesData.diet_type},
@@ -305,8 +476,30 @@ export async function POST(request) {
             updated_at = NOW()
           WHERE id = ${userId}::uuid
         `;
+      } else if (!hasApplyPreferencesColumn && hasBudgetColumns) {
+        await sql`
+          UPDATE users SET
+            diet_type = ${preferencesData.diet_type},
+            allergies = ${preferencesData.allergies},
+            dislikes = ${preferencesData.dislikes},
+            preferred_cuisines = ${preferencesData.preferred_cuisines},
+            experience_level = ${preferencesData.experience_level},
+            goals = ${preferencesData.goals},
+            cooking_skill = ${preferencesData.cooking_skill},
+            preferred_cooking_time = ${preferencesData.preferred_cooking_time},
+            people_count = ${preferencesData.people_count},
+            daily_suggestion_enabled = ${preferencesData.daily_suggestion_enabled},
+            daily_suggestion_time = ${preferencesData.daily_suggestion_time},
+            weekly_plan_enabled = ${preferencesData.weekly_plan_enabled},
+            weekly_plan_days = ${preferencesData.weekly_plan_days},
+            measurement_system = ${preferencesData.measurement_system},
+            onboarding_completed = ${preferencesData.onboarding_completed},
+            budget_amount = ${preferencesData.budget_amount},
+            budget_period = ${preferencesData.budget_period},
+            updated_at = NOW()
+          WHERE id = ${userId}::uuid
+        `;
       } else {
-        // Update without apply_preferences_in_assistant column
         await sql`
           UPDATE users SET
             diet_type = ${preferencesData.diet_type},

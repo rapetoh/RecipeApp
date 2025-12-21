@@ -48,7 +48,7 @@ export function DietTypeSection({ selectedDiets = [], onToggle }) {
                 {IconComponent && (
                   <IconComponent
                     size={18}
-                    color={isSelected ? "#8B5CF6" : "#666666"}
+                    color={isSelected ? "#FF9F1C" : "#666666"}
                   />
                 )}
                 <Text
@@ -62,7 +62,7 @@ export function DietTypeSection({ selectedDiets = [], onToggle }) {
                 </Text>
               </View>
               {isSelected && (
-                <CheckCircle size={18} color="#8B5CF6" />
+                <CheckCircle size={18} color="#FF9F1C" />
               )}
             </TouchableOpacity>
           );
@@ -100,8 +100,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   optionCardSelected: {
-    borderColor: "#8B5CF6",
-    backgroundColor: "#F3F3FF",
+    borderColor: "#FF9F1C",
+    backgroundColor: "#FFF5E6",
   },
   optionContent: {
     flexDirection: "row",
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     color: "#000000",
   },
   optionTextSelected: {
-    color: "#8B5CF6",
+    color: "#FF9F1C",
   },
 });
 

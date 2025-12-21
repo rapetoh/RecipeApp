@@ -1,63 +1,64 @@
 {
-	"expo": {
-		"name": "Recipe App",
-		"slug": "recipe-app",
-		"version": "1.0.0",
-		"orientation": "portrait",
-		"icon": "./assets/images/icon.png",
-		"userInterfaceStyle": "automatic",
-		"newArchEnabled": true,
-		"splash": {
-			"image": "./assets/images/splash-icon.png",
-			"resizeMode": "contain",
-			"backgroundColor": "#ffffff"
-		},
-		"ios": {
-			"supportsTablet": true,
-			"bundleIdentifier": "com.recipeapp.mobile"
-		},
-		"android": {
-			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/adaptive-icon.png",
-				"backgroundColor": "#ffffff"
-			},
-			"package": "com.recipeapp.mobile"
-		},
-		"web": {
-			"bundler": "metro",
-			"favicon": "./assets/images/favicon.png"
-		},
-		"plugins": [
-			"expo-router",
-			[
-				"expo-splash-screen",
-				{
-					"image": "./assets/images/splash-icon.png",
-					"imageWidth": 200,
-					"resizeMode": "contain"
-				}
-			],
-			"expo-camera",
-			[
-				"expo-build-properties",
-				{
-					"ios": {
-						"useFrameworks": "static"
-					}
-				}
-			]
-		],
-		"experiments": {
-			"typedRoutes": true
-		},
-		"extra": {
-			"router": {
-				"origin": false
-			}
-		},
-		"runtimeVersion": {
-			"policy": "appVersion"
-		}
-	}
+  "expo": {
+    "name": "Recipe App",
+    "slug": "recipe-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rapetoh.recipeapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.rapetoh.recipeapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-camera"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "6417719c-f20e-4087-bb6c-a510d9d668e1"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
 }
-

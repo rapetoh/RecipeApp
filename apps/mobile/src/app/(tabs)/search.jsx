@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#10B981",
   },
   generatedBadge: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
   },
   creatorText: {
     color: "#FFFFFF",

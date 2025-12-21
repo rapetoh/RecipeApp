@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "e1785916-7229-4760-999f-e6251cdf8fd3"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.rxpetoh.recipeappstandalone",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

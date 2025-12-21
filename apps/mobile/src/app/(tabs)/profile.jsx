@@ -97,9 +97,6 @@ export default function ProfileScreen() {
       case "settings":
         router.push("/preferences");
         break;
-      case "notifications":
-        router.push("/notification-center");
-        break;
       case "advanced-preferences":
         router.push("/advanced-preferences");
         break;
@@ -159,7 +156,7 @@ export default function ProfileScreen() {
       title: "Meal Plan History",
       subtitle: "View past meal plans",
       icon: Calendar,
-      color: "#8B5CF6",
+      color: "#FF9F1C",
       requiresAuth: true,
     },
     {
@@ -191,15 +188,7 @@ export default function ProfileScreen() {
       title: "Advanced Preferences",
       subtitle: "Detailed diet & allergy settings",
       icon: Settings,
-      color: "#8B5CF6",
-      requiresAuth: false,
-    },
-    {
-      id: "notifications",
-      title: "Notifications",
-      subtitle: "Manage reminders & alerts",
-      icon: Bell,
-      color: "#6366F1",
+      color: "#FF9F1C",
       requiresAuth: false,
     },
   ];

@@ -5,7 +5,7 @@ import { Lock } from "lucide-react-native";
 export function AuthPrompt({ onSignIn }) {
   return (
     <View style={styles.container}>
-      <Lock size={48} color="#8B5CF6" />
+      <Lock size={48} color="#FF9F1C" />
       <Text style={[styles.title, { fontFamily: "Inter_700Bold" }]}>
         Sign In Required
       </Text>
@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
     borderRadius: 12,
     paddingHorizontal: 32,
     paddingVertical: 16,

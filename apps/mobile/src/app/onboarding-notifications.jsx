@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 
 const DAYS_OF_WEEK = [
   { id: "mon", label: "Mon", fullLabel: "Monday" },
@@ -82,6 +83,7 @@ export default function OnboardingNotificationsScreen() {
   ]);
   const [measurementSystem, setMeasurementSystem] = useState("metric");
   const [loading, setLoading] = useState(false);
+  const [notificationPermissionAsked, setNotificationPermissionAsked] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -89,6 +91,39 @@ export default function OnboardingNotificationsScreen() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // Request notification permission on mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if (Platform.OS === "web") {
+      // Web doesn't support push notifications the same way
+      return;
+    }
+
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      
+      if (existingStatus === "granted") {
+        setNotificationPermissionAsked(true);
+        return;
+      }
+
+      const { status } = await Notifications.requestPermissionsAsync();
+      setNotificationPermissionAsked(true);
+      
+      if (status === "granted") {
+        // Get the push token for future use (can be saved to backend)
+        const token = await Notifications.getExpoPushTokenAsync();
+        console.log("Notification permission granted. Push token:", token.data);
+      }
+    } catch (error) {
+      console.error("Error requesting notification permission:", error);
+      setNotificationPermissionAsked(true);
+    }
+  };
 
   const handleTimePress = (timeValue) => {
     if (Platform.OS !== "web") {
@@ -233,9 +268,34 @@ export default function OnboardingNotificationsScreen() {
             Almost done! 🎉
           </Text>
           <Text style={[styles.subtitle, { fontFamily: "Inter_400Regular" }]}>
-            Let's set up your notifications and preferences
+            Let's set up your preferences
           </Text>
         </View>
+
+        {/* Notification Permission Info */}
+        {Platform.OS !== "web" && (
+          <View style={styles.notificationInfoCard}>
+            <Bell size={24} color="#8B5CF6" />
+            <View style={styles.notificationInfoText}>
+              <Text
+                style={[
+                  styles.notificationInfoTitle,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Notifications Enabled
+              </Text>
+              <Text
+                style={[
+                  styles.notificationInfoSubtitle,
+                  { fontFamily: "Inter_400Regular" },
+                ]}
+              >
+                You'll receive helpful reminders about meal suggestions, cooking times, and grocery lists.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Daily Suggestions Section */}
         <View style={styles.section}>
@@ -701,5 +761,27 @@ const styles = StyleSheet.create({
   finishButtonText: {
     fontSize: 18,
     color: "#FFFFFF",
+  },
+  notificationInfoCard: {
+    flexDirection: "row",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  notificationInfoText: {
+    flex: 1,
+  },
+  notificationInfoTitle: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 4,
+  },
+  notificationInfoSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+    lineHeight: 20,
   },
 });

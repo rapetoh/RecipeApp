@@ -126,47 +126,21 @@ export async function POST(request) {
       );
     }
 
-    // Check if meal plan already exists for this date and meal type
-    const existingPlan = await sql`
-      SELECT id FROM meal_plans 
-      WHERE user_id = ${userId}::uuid 
-        AND date = ${date}::date 
-        AND meal_type = ${mealType}
+    // Always insert a new meal plan (allow multiple recipes per meal type per date)
+    const newPlan = await sql`
+      INSERT INTO meal_plans (user_id, date, meal_type, recipe_id)
+      VALUES (${userId}::uuid, ${date}::date, ${mealType}, ${recipeId})
+      RETURNING *
     `;
 
-    if (existingPlan.length > 0) {
-      // Update existing plan
-      const updatedPlan = await sql`
-        UPDATE meal_plans 
-        SET recipe_id = ${recipeId}
-        WHERE user_id = ${userId}::uuid 
-          AND date = ${date}::date 
-          AND meal_type = ${mealType}
-        RETURNING *
-      `;
-
-      return Response.json({
+    return Response.json(
+      {
         success: true,
-        data: updatedPlan[0],
-        message: "Meal plan updated successfully",
-      });
-    } else {
-      // Create new meal plan
-      const newPlan = await sql`
-        INSERT INTO meal_plans (user_id, date, meal_type, recipe_id)
-        VALUES (${userId}::uuid, ${date}::date, ${mealType}, ${recipeId})
-        RETURNING *
-      `;
-
-      return Response.json(
-        {
-          success: true,
-          data: newPlan[0],
-          message: "Meal added to plan successfully",
-        },
-        { status: 201 },
-      );
-    }
+        data: newPlan[0],
+        message: "Meal added to plan successfully",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Error creating/updating meal plan:", error);
     return Response.json(
@@ -194,14 +168,14 @@ export async function DELETE(request) {
 
     let result;
 
-    if (id) {
+    if (id && id !== "undefined") {
       // Delete by meal plan ID
       result = await sql`
         DELETE FROM meal_plans 
         WHERE id = ${id} AND user_id = ${userId}::uuid
         RETURNING *
       `;
-    } else if (date && mealType) {
+    } else if (date && mealType && date !== "undefined" && mealType !== "undefined") {
       // Delete by date and meal type
       result = await sql`
         DELETE FROM meal_plans 

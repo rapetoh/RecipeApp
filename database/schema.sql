@@ -88,6 +88,8 @@ CREATE TABLE IF NOT EXISTS users (
   calorie_goal INTEGER,
   experience_level VARCHAR(50),
   cooking_schedule TEXT,
+  budget_amount DECIMAL(10,2),
+  budget_period VARCHAR(20) CHECK (budget_period IN ('weekly', 'biweekly', 'monthly')),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -102,14 +104,14 @@ CREATE TABLE IF NOT EXISTS saved_recipes (
 );
 
 -- Meal plans
+-- Note: Multiple recipes can be added per meal type per date (UNIQUE constraint removed)
 CREATE TABLE IF NOT EXISTS meal_plans (
   id SERIAL PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   meal_type VARCHAR(20) NOT NULL CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
   recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(user_id, date, meal_type)
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Grocery lists

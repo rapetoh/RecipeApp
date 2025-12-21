@@ -1243,7 +1243,7 @@ export default function PreferencesScreen() {
           >
             <View style={styles.advancedButtonContent}>
               <View style={styles.advancedIcon}>
-                <Sliders size={20} color="#8B5CF6" />
+                <Sliders size={20} color="#FF9F1C" />
               </View>
               <View style={styles.advancedText}>
                 <Text
@@ -1809,7 +1809,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 2,
-    borderColor: "#8B5CF6",
+    borderColor: "#FF9F1C",
   },
   advancedButtonContent: {
     flexDirection: "row",
@@ -1820,7 +1820,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -1839,7 +1839,7 @@ const styles = StyleSheet.create({
   },
   advancedArrow: {
     fontSize: 24,
-    color: "#8B5CF6",
+    color: "#FF9F1C",
     fontWeight: "bold",
   },
 });

@@ -148,20 +148,44 @@ export async function POST(request) {
       0,
     );
 
-    // Save the grocery list
-    const savedList = await sql`
-      INSERT INTO grocery_lists (
-        user_id, name, items, created_from_meal_plan, 
-        meal_plan_week, estimated_cost
-      ) VALUES (
-        ${userId}::uuid,
-        ${name || `Grocery List - Week of ${new Date(startDate).toLocaleDateString()}`},
-        ${JSON.stringify(groceryItems)},
-        ${true},
-        ${startDate}::date,
-        ${totalEstimatedCost}
-      ) RETURNING *
+    // Check if a grocery list already exists for this date range
+    const existingList = await sql`
+      SELECT id FROM grocery_lists
+      WHERE user_id = ${userId}::uuid
+        AND meal_plan_week = ${startDate}::date
+        AND created_from_meal_plan = true
+      LIMIT 1
     `;
+
+    let savedList;
+    if (existingList.length > 0) {
+      // Update existing list
+      savedList = await sql`
+        UPDATE grocery_lists
+        SET 
+          name = ${name || `Grocery List - Week of ${new Date(startDate).toLocaleDateString()}`},
+          items = ${JSON.stringify(groceryItems)},
+          estimated_cost = ${totalEstimatedCost},
+          updated_at = NOW()
+        WHERE id = ${existingList[0].id}
+        RETURNING *
+      `;
+    } else {
+      // Create new list
+      savedList = await sql`
+        INSERT INTO grocery_lists (
+          user_id, name, items, created_from_meal_plan, 
+          meal_plan_week, estimated_cost
+        ) VALUES (
+          ${userId}::uuid,
+          ${name || `Grocery List - Week of ${new Date(startDate).toLocaleDateString()}`},
+          ${JSON.stringify(groceryItems)},
+          ${true},
+          ${startDate}::date,
+          ${totalEstimatedCost}
+        ) RETURNING *
+      `;
+    }
 
     console.log("Successfully generated grocery list:", savedList[0].id);
 

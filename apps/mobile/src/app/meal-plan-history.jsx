@@ -201,11 +201,16 @@ export default function MealPlanHistoryScreen() {
               period.meals[dateKey] = {};
             }
             
-            period.meals[dateKey][meal.meal_type] = {
+            // Support multiple recipes per meal type
+            if (!period.meals[dateKey][meal.meal_type]) {
+              period.meals[dateKey][meal.meal_type] = [];
+            }
+            
+            period.meals[dateKey][meal.meal_type].push({
               id: meal.recipe_id,
               name: meal.recipe_name,
               cooking_time: meal.cooking_time,
-            };
+            });
             
             period.mealsPlanned++;
             period.totalRecipes.add(meal.recipe_id);
@@ -254,19 +259,24 @@ export default function MealPlanHistoryScreen() {
         const targetDate = new Date(targetStartDate);
         targetDate.setDate(targetDate.getDate() + daysDiff);
         
-        Object.entries(period.meals[dateKey] || {}).forEach(([mealType, meal]) => {
-          promises.push(
-            fetch(`${apiUrl}/api/meal-plans`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: auth.user.id,
-                date: targetDate.toISOString().split("T")[0],
-                mealType: mealType,
-                recipeId: meal.id,
-              }),
-            })
-          );
+        Object.entries(period.meals[dateKey] || {}).forEach(([mealType, meals]) => {
+          // Handle both array (new format) and single object (old format for backward compatibility)
+          const mealsArray = Array.isArray(meals) ? meals : [meals];
+          
+          mealsArray.forEach((meal) => {
+            promises.push(
+              fetch(`${apiUrl}/api/meal-plans`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: auth.user.id,
+                  date: targetDate.toISOString().split("T")[0],
+                  mealType: mealType,
+                  recipeId: meal.id,
+                }),
+              })
+            );
+          });
         });
       });
 
@@ -462,7 +472,7 @@ export default function MealPlanHistoryScreen() {
             style={styles.copyButton}
             onPress={() => setShowWeekOptions(selectedWeek)}
           >
-            <Copy size={20} color="#8B5CF6" />
+            <Copy size={20} color="#FF9F1C" />
           </TouchableOpacity>
         </View>
 
@@ -470,7 +480,7 @@ export default function MealPlanHistoryScreen() {
           {/* Week Summary */}
           <View style={styles.weekSummaryCard}>
             <View style={styles.summaryHeader}>
-              <Calendar size={24} color="#8B5CF6" />
+              <Calendar size={24} color="#FF9F1C" />
               <View style={styles.summaryInfo}>
                 <Text
                   style={[
@@ -572,7 +582,9 @@ export default function MealPlanHistoryScreen() {
                   {dayMeals ? (
                     <View style={styles.mealsGrid}>
                       {["breakfast", "lunch", "dinner"].map((mealType) => {
-                        const meal = dayMeals[mealType];
+                        const meals = Array.isArray(dayMeals[mealType]) 
+                          ? dayMeals[mealType] 
+                          : (dayMeals[mealType] ? [dayMeals[mealType]] : []);
 
                         return (
                           <View key={mealType} style={styles.mealSlot}>
@@ -586,28 +598,35 @@ export default function MealPlanHistoryScreen() {
                               >
                                 {mealType.charAt(0).toUpperCase() +
                                   mealType.slice(1)}
+                                {meals.length > 0 && (
+                                  <Text style={styles.mealCount}> ({meals.length})</Text>
+                                )}
                               </Text>
                             </View>
 
-                            {meal ? (
-                              <View style={styles.mealDetails}>
-                                <Text
-                                  style={[
-                                    styles.mealName,
-                                    { fontFamily: "Inter_500Medium" },
-                                  ]}
-                                  numberOfLines={2}
-                                >
-                                  {meal.name}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.mealMeta,
-                                    { fontFamily: "Inter_400Regular" },
-                                  ]}
-                                >
-                                  {meal.cooking_time} min
-                                </Text>
+                            {meals.length > 0 ? (
+                              <View style={styles.mealsList}>
+                                {meals.map((meal, idx) => (
+                                  <View key={idx} style={styles.mealDetails}>
+                                    <Text
+                                      style={[
+                                        styles.mealName,
+                                        { fontFamily: "Inter_500Medium" },
+                                      ]}
+                                      numberOfLines={2}
+                                    >
+                                      {meal.name}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.mealMeta,
+                                        { fontFamily: "Inter_400Regular" },
+                                      ]}
+                                    >
+                                      {meal.cooking_time} min
+                                    </Text>
+                                  </View>
+                                ))}
                               </View>
                             ) : (
                               <View style={styles.emptyMeal}>
@@ -737,8 +756,8 @@ export default function MealPlanHistoryScreen() {
               await queryClient.invalidateQueries(["meal-plan-history"]);
               setRefreshing(false);
             }}
-            colors={["#8B5CF6"]}
-            tintColor="#8B5CF6"
+            colors={["#FF9F1C"]}
+            tintColor="#FF9F1C"
           />
         }
       >
@@ -746,7 +765,7 @@ export default function MealPlanHistoryScreen() {
           if (!isAuthenticated) {
             return (
               <View style={styles.authPrompt}>
-                <Calendar size={48} color="#8B5CF6" />
+                <Calendar size={48} color="#FF9F1C" />
                 <Text style={[styles.authTitle, { fontFamily: "Inter_700Bold" }]}>
                   View Your History
                 </Text>
@@ -770,7 +789,7 @@ export default function MealPlanHistoryScreen() {
           if (isLoading) {
             return (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#8B5CF6" />
+                <ActivityIndicator size="large" color="#FF9F1C" />
                 <Text style={[styles.loadingText, { fontFamily: "Inter_400Regular" }]}>
                   Loading meal plan history...
                 </Text>
@@ -786,7 +805,7 @@ export default function MealPlanHistoryScreen() {
                 {/* Current Week Indicator */}
                 <View style={styles.currentWeekCard}>
                   <View style={styles.currentWeekHeader}>
-                    <Calendar size={20} color="#8B5CF6" />
+                    <Calendar size={20} color="#FF9F1C" />
                     <Text
                       style={[
                         styles.currentWeekText,
@@ -808,7 +827,7 @@ export default function MealPlanHistoryScreen() {
                     >
                       View Current Plan
                     </Text>
-                    <ChevronRight size={16} color="#8B5CF6" />
+                    <ChevronRight size={16} color="#FF9F1C" />
                   </TouchableOpacity>
                 </View>
 
@@ -838,7 +857,7 @@ export default function MealPlanHistoryScreen() {
                         >
                           <View style={styles.weekCardLeft}>
                             <View style={styles.weekIcon}>
-                              <Calendar size={20} color="#8B5CF6" />
+                              <Calendar size={20} color="#FF9F1C" />
                             </View>
                             <View style={styles.weekInfo}>
                               <Text
@@ -966,7 +985,7 @@ export default function MealPlanHistoryScreen() {
                 style={styles.modalOption}
                 onPress={handleCopyWeek}
               >
-                <Copy size={18} color="#8B5CF6" />
+                <Copy size={18} color="#FF9F1C" />
                 <Text
                   style={[
                     styles.modalOptionTextPrimary,
@@ -1040,7 +1059,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   viewModeButtonActive: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
   },
   viewModeButtonText: {
     fontSize: 14,
@@ -1053,7 +1072,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1086,7 +1105,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   authButton: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
     borderRadius: 12,
     paddingHorizontal: 32,
     paddingVertical: 16,
@@ -1098,12 +1117,12 @@ const styles = StyleSheet.create({
 
   // Current Week Card
   currentWeekCard: {
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     borderRadius: 16,
     padding: 16,
     marginVertical: 16,
     borderWidth: 1,
-    borderColor: "#8B5CF6",
+    borderColor: "#FF9F1C",
   },
   currentWeekHeader: {
     flexDirection: "row",
@@ -1112,14 +1131,14 @@ const styles = StyleSheet.create({
   },
   currentWeekText: {
     fontSize: 14,
-    color: "#8B5CF6",
+    color: "#FF9F1C",
     marginLeft: 8,
   },
   viewCurrentButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#FF9F1C",
     borderRadius: 12,
     paddingVertical: 12,
     gap: 8,
@@ -1163,7 +1182,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -1323,8 +1342,17 @@ const styles = StyleSheet.create({
     color: "#666666",
     textTransform: "uppercase",
   },
+  mealCount: {
+    fontSize: 9,
+    color: "#999999",
+    fontWeight: "normal",
+  },
+  mealsList: {
+    gap: 8,
+  },
   mealDetails: {
     gap: 4,
+    marginBottom: 8,
   },
   mealName: {
     fontSize: 12,
@@ -1406,7 +1434,7 @@ const styles = StyleSheet.create({
   },
   modalOptionTextPrimary: {
     fontSize: 16,
-    color: "#8B5CF6",
+    color: "#FF9F1C",
   },
   loadingContainer: {
     alignItems: "center",

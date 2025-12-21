@@ -71,7 +71,7 @@ export function DislikesSection({
       </View>
 
       <TouchableOpacity style={styles.addButton} onPress={onAdd}>
-        <Plus size={18} color="#8B5CF6" />
+        <Plus size={18} color="#FF9F1C" />
         <Text
           style={[styles.addButtonText, { fontFamily: "Inter_500Medium" }]}
         >
@@ -168,14 +168,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     borderRadius: 12,
     paddingVertical: 12,
     marginBottom: 16,
   },
   addButtonText: {
     fontSize: 14,
-    color: "#8B5CF6",
+    color: "#FF9F1C",
   },
   selectedContainer: {
     marginTop: 8,

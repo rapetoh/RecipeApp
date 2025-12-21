@@ -33,9 +33,9 @@ export function PreferenceHeader({ onBack, onSave, saving = false }) {
         disabled={saving}
       >
         {saving ? (
-          <ActivityIndicator size="small" color="#8B5CF6" />
+          <ActivityIndicator size="small" color="#FF9F1C" />
         ) : (
-          <Save size={18} color="#8B5CF6" />
+          <Save size={18} color="#FF9F1C" />
         )}
       </TouchableOpacity>
     </View>
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#F3F3FF",
+    backgroundColor: "#FFF5E6",
     justifyContent: "center",
     alignItems: "center",
   },

@@ -24,7 +24,7 @@ export function GoalsSection({ selectedGoals = [], onToggle }) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Target size={20} color="#8B5CF6" />
+        <Target size={20} color="#FF9F1C" />
         <Text style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}>
           Cooking Goals
         </Text>

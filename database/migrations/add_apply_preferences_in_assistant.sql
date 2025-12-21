@@ -9,3 +9,7 @@ UPDATE users
 SET apply_preferences_in_assistant = true 
 WHERE apply_preferences_in_assistant IS NULL;
 
+
+
+
+

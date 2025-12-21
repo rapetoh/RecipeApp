@@ -41,3 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_meal_plan_suggestions_recipe
 CREATE INDEX IF NOT EXISTS idx_meal_plan_suggestions_user_date_meal 
   ON meal_plan_suggestions(user_id, date, meal_type);
 
+
+
+
+
