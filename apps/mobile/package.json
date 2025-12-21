@@ -6,8 +6,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "postinstall": "node scripts/fix-expo-rct-release-level.js"
+    "web": "expo start --web"
   },
   "dependencies": {
     "@expo-google-fonts/dev": "^0.4.7",
@@ -22,7 +21,7 @@
     "@tanstack/react-query": "^5.72.2",
     "color2k": "^2.0.3",
     "date-fns": "^4.1.0",
-    "expo": "~54.0.0",
+    "expo": "~53.0.0",
     "expo-audio": "~0.4.6",
     "expo-av": "~15.1.6",
     "expo-blur": "~14.1.5",
