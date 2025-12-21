@@ -55,6 +55,23 @@ function fixFile(filePath) {
     modified = true;
   }
   
+  // Fix Swift style super.init call to remove releaseLevel parameter (MUST be before other patterns)
+  // This handles: super.init(delegate: delegate, releaseLevel: releaseLevel)
+  if (content.includes('super.init(delegate: delegate, releaseLevel: releaseLevel)')) {
+    content = content.replace(
+      /super\.init\(delegate:\s*delegate,\s*releaseLevel:\s*releaseLevel\)/g,
+      'super.init(delegate: delegate)'
+    );
+    modified = true;
+  }
+  
+  // Also handle: super.init(delegate: delegate, releaseLevel: someValue)
+  const swiftSuperInitPattern = /super\.init\(delegate:\s*delegate,\s*releaseLevel:\s*[^)]+\)/g;
+  if (swiftSuperInitPattern.test(content)) {
+    content = content.replace(swiftSuperInitPattern, 'super.init(delegate: delegate)');
+    modified = true;
+  }
+  
   // Fix Objective-C method calls with releaseLevel parameter
   // Pattern: [factory initWithDelegate:delegate releaseLevel:releaseLevel]
   const objcMethodPattern = /\[([^\]]+)\s+initWithDelegate:\s*([^\s]+)\s+releaseLevel:\s*([^\]]+)\]/g;
@@ -70,8 +87,9 @@ function fixFile(filePath) {
     modified = true;
   }
   
-  // Remove any remaining releaseLevel: parameter from method calls
-  const remainingReleaseLevelPattern = /releaseLevel:\s*[^,\]]+/g;
+  // Remove any remaining releaseLevel: parameter from method calls (be careful with commas)
+  // This pattern removes ", releaseLevel: value" including the comma before it
+  const remainingReleaseLevelPattern = /,\s*releaseLevel:\s*[^,\])]+/g;
   if (remainingReleaseLevelPattern.test(content)) {
     content = content.replace(remainingReleaseLevelPattern, '');
     modified = true;
@@ -81,15 +99,6 @@ function fixFile(filePath) {
   content = content.replace(/,\s*,/g, ',');
   content = content.replace(/\[\s*\]/g, '[]');
   content = content.replace(/\s{2,}/g, ' ');
-  
-  // Fix Swift style super.init call to remove releaseLevel parameter
-  if (content.includes('super.init(delegate: delegate, releaseLevel: releaseLevel)')) {
-    content = content.replace(
-      /super\.init\(delegate: delegate, releaseLevel: releaseLevel\)/g,
-      'super.init(delegate: delegate)'
-    );
-    modified = true;
-  }
   
   // Remove any standalone references to releaseLevel variable (but keep ReactNativeReleaseLevel string keys)
   if (content.includes('releaseLevel') && !content.includes('ReactNativeReleaseLevel')) {
