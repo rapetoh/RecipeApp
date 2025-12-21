@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "node scripts/fix-expo-dev-menu-colors.js"
   },
   "dependencies": {
     "@expo-google-fonts/dev": "^0.4.7",
@@ -29,7 +30,7 @@
     "expo-camera": "~16.1.8",
     "expo-clipboard": "~7.1.4",
     "expo-constants": "~17.1.4",
-    "expo-dev-client": "~6.0.18",
+    "expo-dev-client": "6.0.15",
     "expo-font": "~13.3.0",
     "expo-haptics": "~14.1.4",
     "expo-image": "~2.2.1",
@@ -42,6 +43,7 @@
     "expo-splash-screen": "~0.30.9",
     "expo-status-bar": "~2.2.3",
     "expo-web-browser": "~14.1.6",
+    "isexe": "^3.1.1",
     "lodash": "^4.17.21",
     "lucide-react-native": "^0.525.0",
     "moti": "0.30.0",
