@@ -1,0 +1,245 @@
+diff --git a/node_modules/expo-dev-launcher/ios/ReactDelegateHandler/ExpoDevLauncherReactDelegateHandler.swift b/node_modules/expo-dev-launcher/ios/ReactDelegateHandler/ExpoDevLauncherReactDelegateHandler.swift
+index 306aad6..7cd35ed 100644
+--- a/node_modules/expo-dev-launcher/ios/ReactDelegateHandler/ExpoDevLauncherReactDelegateHandler.swift
++++ b/node_modules/expo-dev-launcher/ios/ReactDelegateHandler/ExpoDevLauncherReactDelegateHandler.swift
+@@ -55,7 +55,7 @@ public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDe
+     ((UIApplication.shared.delegate as? NSObject)?.value(forKey: "_expoAppDelegate") as? (any ReactNativeFactoryProvider)) : nil)
+     let reactDelegate = self.reactDelegate
+ 
+-    guard let reactNativeFactory = appDelegate?.factory as? RCTReactNativeFactory ?? reactDelegate?.reactNativeFactory as? RCTReactNativeFactory else {
++    guard let reactNativeFactory = appDelegate?.factory as? RCTReactNativeFactory else {
+       fatalError("`UIApplication.shared.delegate` must be an `ExpoAppDelegate` or `EXAppDelegateWrapper`")
+     }
+     self.reactNativeFactory = reactNativeFactory
+@@ -82,15 +82,7 @@ public class ExpoDevLauncherReactDelegateHandler: ExpoReactDelegateHandler, EXDe
+           launchOptions: launchOptions
+         )
+       }
+-      if let factory = reactDelegate?.reactNativeFactory {
+-        return factory.recreateRootView(
+-          withBundleURL: withBundleURL,
+-          moduleName: moduleName,
+-          initialProps: initialProps,
+-          launchOptions: launchOptions
+-        )
+-      }
+-
++      // Removed: reactDelegate?.reactNativeFactory does not exist in SDK 53
+       fatalError("`UIApplication.shared.delegate` must be an `ExpoAppDelegate` or `EXAppDelegateWrapper`")
+     }
+ 
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/DevLauncherViews.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/DevLauncherViews.swift
+index 9694626..5db3607 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/DevLauncherViews.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/DevLauncherViews.swift
+@@ -112,7 +112,7 @@ struct RecentlyOpenedAppRow: View {
+           .foregroundColor(.secondary)
+       }
+       .padding()
+-      .background(Color.expoSecondarySystemBackground)
++      .background(Color(UIColor.secondarySystemBackground))
+       .clipShape(RoundedRectangle(cornerRadius: 12))
+     }
+     .buttonStyle(PlainButtonStyle())
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/DevServerInfoModal.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/DevServerInfoModal.swift
+index 4792ff7..2169c12 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/DevServerInfoModal.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/DevServerInfoModal.swift
+@@ -28,7 +28,7 @@ struct DevServerInfoModal: View {
+       info
+     }
+     .padding(20)
+-    .background(Color.expoSystemBackground)
++    .background(Color(UIColor.systemBackground))
+     .clipShape(RoundedRectangle(cornerRadius: 16))
+     .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+     .padding(.horizontal, 40)
+@@ -60,11 +60,11 @@ struct DevServerInfoModal: View {
+         .font(.system(.callout, design: .monospaced))
+         .padding(.horizontal, 12)
+         .padding(.vertical, 8)
+-        .background(Color.expoSystemGray6)
++        .background(Color(UIColor.systemGray6))
+         .clipShape(RoundedRectangle(cornerRadius: 6))
+         .overlay(
+           RoundedRectangle(cornerRadius: 6)
+-            .stroke(Color.expoSystemGray4, lineWidth: 1)
++            .stroke(Color(UIColor.systemGray4), lineWidth: 1)
+         )
+ 
+       Text("Then, select the local server when it appears here.")
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/DevServersView.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/DevServersView.swift
+index a6f7d1f..ebecd08 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/DevServersView.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/DevServersView.swift
+@@ -103,7 +103,7 @@ struct DevServersView: View {
+         #if !os(tvOS)
+           .overlay(
+             RoundedRectangle(cornerRadius: 5)
+-              .stroke(Color.expoSystemGray4, lineWidth: 1)
++              .stroke(Color(UIColor.systemGray4), lineWidth: 1)
+           )
+         #endif
+           .clipShape(RoundedRectangle(cornerRadius: 5))
+@@ -114,8 +114,8 @@ struct DevServersView: View {
+     .animation(.easeInOut, value: showingURLInput)
+     .padding()
+     .background(showingURLInput ?
+-      Color.expoSecondarySystemBackground :
+-      Color.expoSystemBackground)
++      Color(UIColor.secondarySystemBackground) :
++      Color(UIColor.systemBackground))
+     .clipShape(RoundedRectangle(cornerRadius: 12))
+   }
+ 
+@@ -190,7 +190,7 @@ struct DevServerRow: View {
+           .foregroundColor(.secondary)
+       }
+       .padding()
+-      .background(Color.expoSecondarySystemBackground)
++      .background(Color(UIColor.secondarySystemBackground))
+       .clipShape(RoundedRectangle(cornerRadius: 12))
+     }
+     .buttonStyle(PlainButtonStyle())
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/ErrorView.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/ErrorView.swift
+index 327214f..454b7e7 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/ErrorView.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/ErrorView.swift
+@@ -28,7 +28,7 @@ struct ErrorView: View {
+ 
+       actions
+     }
+-    .background(Color.expoSystemBackground)
++    .background(Color(UIColor.systemBackground))
+     .navigationBarHidden(true)
+   }
+ 
+@@ -49,7 +49,7 @@ struct ErrorView: View {
+       .padding()
+       .frame(maxWidth: .infinity, alignment: .leading)
+     }
+-    .background(Color.expoSystemGray6)
++    .background(Color(UIColor.systemGray6))
+     .cornerRadius(8)
+   }
+ 
+@@ -71,12 +71,12 @@ struct ErrorView: View {
+           .foregroundColor(.black)
+           .frame(maxWidth: .infinity)
+           .padding()
+-          .background(Color.expoSystemGray5)
++          .background(Color(UIColor.systemGray5))
+           .cornerRadius(8)
+       }
+     }
+     .padding(.horizontal, 20)
+     .padding(.vertical, 20)
+-    .background(Color.expoSystemBackground)
++    .background(Color(UIColor.systemBackground))
+   }
+ }
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/HomeTabView.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/HomeTabView.swift
+index 67aba4d..9763864 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/HomeTabView.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/HomeTabView.swift
+@@ -72,7 +72,7 @@ struct HomeTabView: View {
+         .padding()
+     }
+     .buttonStyle(PlainButtonStyle())
+-    .background(Color.expoSecondarySystemGroupedBackground)
++    .background(Color(UIColor.secondarySystemGroupedBackground))
+     .cornerRadius(18)
+   }
+ }
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/Navigation/Navigation.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/Navigation/Navigation.swift
+index c9187e5..7a6e99b 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/Navigation/Navigation.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/Navigation/Navigation.swift
+@@ -58,7 +58,7 @@ struct DevLauncherNavigationHeader: View {
+         } else {
+           ZStack {
+             Circle()
+-              .fill(Color.expoSystemGray6)
++              .fill(Color(UIColor.systemGray6))
+               .frame(width: 36, height: 36)
+ 
+             Image("user-icon", bundle: getDevLauncherBundle())
+@@ -70,7 +70,7 @@ struct DevLauncherNavigationHeader: View {
+     }
+     .padding(.horizontal)
+     .padding(.vertical, 8)
+-    .background(Color.expoSystemBackground)
++    .background(Color(UIColor.systemBackground))
+   }
+ 
+   @ViewBuilder
+@@ -99,7 +99,7 @@ struct DevLauncherNavigationHeader: View {
+           .scaledToFill()
+       } placeholder: {
+         Circle()
+-          .fill(Color.expoSystemGray5)
++          .fill(Color(UIColor.systemGray5))
+           .overlay(
+             Image(systemName: "person")
+               .font(.system(size: 16))
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/SettingsTabView.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/SettingsTabView.swift
+index 570fccc..54d42a0 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/SettingsTabView.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/SettingsTabView.swift
+@@ -71,7 +71,7 @@ struct SettingsTabView: View {
+       Toggle("Show menu at launch", isOn: $viewModel.showOnLaunch)
+     }
+     .padding()
+-    .background(Color.expoSecondarySystemBackground)
++    .background(Color(UIColor.secondarySystemBackground))
+     .cornerRadius(12)
+   }
+ 
+@@ -119,7 +119,7 @@ struct SettingsTabView: View {
+         }
+         .padding()
+       }
+-      .background(Color.expoSecondarySystemBackground)
++      .background(Color(UIColor.secondarySystemBackground))
+       .cornerRadius(12)
+     }
+   }
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdateRow.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdateRow.swift
+index bf4d9e2..a9a64e7 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdateRow.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdateRow.swift
+@@ -23,7 +23,7 @@ struct UpdateRow: View {
+       }
+     }
+     .padding()
+-    .background(Color.expoSecondarySystemBackground)
++    .background(Color(UIColor.secondarySystemBackground))
+     .cornerRadius(12)
+   }
+ 
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdatesListView.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdatesListView.swift
+index f7e122c..8715d67 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdatesListView.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/UpdatesTab/UpdatesListView.swift
+@@ -24,7 +24,7 @@ struct UpdatesListView: View {
+         .foregroundColor(.blue)
+       }
+       .padding()
+-      .background(Color.expoSecondarySystemBackground)
++      .background(Color(UIColor.secondarySystemBackground))
+       .cornerRadius(12)
+ 
+       if isLoading {
+diff --git a/node_modules/expo-dev-launcher/ios/SwiftUI/Utils/Utils.swift b/node_modules/expo-dev-launcher/ios/SwiftUI/Utils/Utils.swift
+index 27ce396..3437c3b 100644
+--- a/node_modules/expo-dev-launcher/ios/SwiftUI/Utils/Utils.swift
++++ b/node_modules/expo-dev-launcher/ios/SwiftUI/Utils/Utils.swift
+@@ -51,7 +51,7 @@ extension Text {
+ 
+ extension View {
+   func systemGroupedBackground() -> some View {
+-    return self.background(Color.expoSystemGroupedBackground)
++    return self.background(Color(UIColor.systemGroupedBackground))
+   }
+ }
+ 

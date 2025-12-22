@@ -25,10 +25,24 @@ function findSwiftFiles(dir, fileList = []) {
   return fileList;
 }
 
-const expoDevMenuPath = path.join(__dirname, '..', 'node_modules', 'expo-dev-menu', 'ios');
-const filesToFix = findSwiftFiles(expoDevMenuPath);
+// Fix Color extensions in BOTH expo-dev-menu AND expo-dev-launcher
+const packagesToFix = [
+  { name: 'expo-dev-menu', path: path.join(__dirname, '..', 'node_modules', 'expo-dev-menu', 'ios') },
+  { name: 'expo-dev-launcher', path: path.join(__dirname, '..', 'node_modules', 'expo-dev-launcher', 'ios') },
+];
 
-function fixFile(filePath) {
+const allFilesToFix = [];
+packagesToFix.forEach(pkg => {
+  const files = findSwiftFiles(pkg.path);
+  allFilesToFix.push(...files.map(f => ({ file: f, package: pkg.name, basePath: pkg.path })));
+});
+
+const filesToFix = allFilesToFix;
+
+function fixFile(fileInfo) {
+  const filePath = fileInfo.file || fileInfo; // Support both old and new format
+  const basePath = fileInfo.basePath || path.dirname(filePath);
+  
   if (!fs.existsSync(filePath)) {
     return false;
   }
@@ -37,44 +51,35 @@ function fixFile(filePath) {
   const originalContent = content;
   let modified = false;
   
-  // Define all Color extension replacements - comprehensive list
-  // Order matters: specific ones first, then generic pattern
-  const specificReplacements = [
-    { pattern: /Color\.expoSecondarySystemBackground/g, replacement: 'Color(UIColor.secondarySystemBackground)' },
-    { pattern: /Color\.expoSystemBackground/g, replacement: 'Color(UIColor.systemBackground)' },
-    { pattern: /Color\.expoSystemGray6/g, replacement: 'Color(UIColor.systemGray6)' },
-    { pattern: /Color\.expoSystemGray5/g, replacement: 'Color(UIColor.systemGray5)' },
-    { pattern: /Color\.expoSystemGray4/g, replacement: 'Color(UIColor.systemGray4)' },
-    { pattern: /Color\.expoSystemGray3/g, replacement: 'Color(UIColor.systemGray3)' },
-    { pattern: /Color\.expoSystemGray2/g, replacement: 'Color(UIColor.systemGray2)' },
-    { pattern: /Color\.expoSystemGray/g, replacement: 'Color(UIColor.systemGray)' },
-  ];
+  // Use a single comprehensive regex to catch ALL Color.expo* patterns
+  // This handles: expoSystemBackground, expoSecondarySystemBackground, 
+  // expoSystemGray6, expoSecondarySystemGroupedBackground, expoSystemGroupedBackground, etc.
+  const colorExpoPattern = /Color\.expo(\w+)/g;
   
-  // Apply specific replacements first
-  for (const { pattern, replacement } of specificReplacements) {
-    if (pattern.test(content)) {
-      content = content.replace(pattern, replacement);
-      modified = true;
-    }
-  }
-  
-  // Handle any other expo* Color extensions generically (catch-all)
-  const genericPattern = /Color\.expo(\w+)/g;
-  const genericMatches = content.match(genericPattern);
-  if (genericMatches) {
-    genericMatches.forEach(match => {
-      const propertyName = match.match(/Color\.expo(\w+)/)[1];
-      // Convert camelCase to proper UIKit name (e.g., ExpoSystemGray -> systemGray)
+  if (colorExpoPattern.test(content)) {
+    // Reset the regex lastIndex since we tested it
+    colorExpoPattern.lastIndex = 0;
+    
+    // Replace all Color.expo* with Color(UIColor.*)
+    content = content.replace(colorExpoPattern, (match, propertyName) => {
+      // Convert camelCase property name to UIKit equivalent
+      // Examples:
+      // expoSystemBackground -> systemBackground
+      // expoSecondarySystemBackground -> secondarySystemBackground
+      // expoSystemGray6 -> systemGray6
+      // expoSecondarySystemGroupedBackground -> secondarySystemGroupedBackground
+      // expoSystemGroupedBackground -> systemGroupedBackground
       const uikitName = propertyName.charAt(0).toLowerCase() + propertyName.slice(1);
-      const replacement = `Color(UIColor.${uikitName})`;
-      content = content.replace(match, replacement);
-      modified = true;
+      return `Color(UIColor.${uikitName})`;
     });
+    modified = true;
   }
   
   if (modified) {
     fs.writeFileSync(filePath, content, 'utf8');
-    console.log(`Fixed Color extensions in ${path.relative(expoDevMenuPath, filePath)}`);
+    const packageName = fileInfo.package || 'unknown';
+    const relativePath = path.relative(basePath, filePath);
+    console.log(`Fixed Color extensions in ${packageName}/${relativePath}`);
     return true;
   }
   
@@ -92,7 +97,7 @@ for (const filePath of filesToFix) {
 }
 
 if (checkedCount === 0) {
-  console.log('No Swift files found in expo-dev-menu (package may not be installed)');
+  console.log('No Swift files found in expo-dev-menu or expo-dev-launcher (packages may not be installed)');
 } else if (fixedCount === 0) {
   console.log(`Checked ${checkedCount} Swift file(s) - no Color extension issues found`);
 } else {

@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "postinstall": "npx patch-package"
+    "postinstall": "npx patch-package && node scripts/fix-expo-dev-menu-colors.js && node scripts/fix-expo-dev-launcher.swift"
   },
   "dependencies": {
     "@expo-google-fonts/dev": "^0.4.7",
