@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -16,7 +16,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rapetoh.recipeapp",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app needs access to your camera to take photos of food for recipe recognition.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select food images for recipe recognition.",
+        "NSPhotoLibraryAddUsageDescription": "This app needs permission to save photos to your library."
       }
     },
     "android": {

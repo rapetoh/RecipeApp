@@ -11,7 +11,12 @@
     },
     "preview": {
       "distribution": "internal",
-      "node": "20.19.4"
+      "node": "20.19.4",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://b7d8da5fa7ef.ngrok-free.app",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dui3u9g4j",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "recipe_upload_preset"
+      }
     },
     "production": {
       "autoIncrement": true,

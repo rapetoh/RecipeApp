@@ -12,12 +12,31 @@ export const useAuth = () => {
   const { isReady, auth, setAuth } = useAuthStore();
 
   const initiate = useCallback(() => {
-    SecureStore.getItemAsync(authKey).then((auth) => {
-      useAuthStore.setState({
-        auth: auth ? JSON.parse(auth) : null,
-        isReady: true,
+    SecureStore.getItemAsync(authKey)
+      .then((auth) => {
+        try {
+          useAuthStore.setState({
+            auth: auth ? JSON.parse(auth) : null,
+            isReady: true,
+          });
+        } catch (error) {
+          // If stored auth is corrupted, clear it and continue
+          console.error('Failed to parse stored auth:', error);
+          SecureStore.deleteItemAsync(authKey).catch(() => {});
+          useAuthStore.setState({
+            auth: null,
+            isReady: true,
+          });
+        }
+      })
+      .catch((error) => {
+        // Handle SecureStore errors gracefully
+        console.error('Failed to get stored auth:', error);
+        useAuthStore.setState({
+          auth: null,
+          isReady: true,
+        });
       });
-    });
   }, []);
 
   useEffect(() => {}, []);
