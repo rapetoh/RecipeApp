@@ -26,8 +26,9 @@ import {
 import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Menu, Bell, Camera, Settings, Heart, X } from "lucide-react-native";
+import { Menu, Bell, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
+import VoiceSuggestions from "@/components/VoiceSuggestions";
 
 const { width: screenWidth } = Dimensions.get("window");
 const cardWidth = (screenWidth - 44) / 2;
@@ -37,10 +38,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auth, isAuthenticated, signIn } = useAuth();
-  const [suggestionCategory, setSuggestionCategory] = useState("all");
   const [longPressModalVisible, setLongPressModalVisible] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedRecipePosition, setSelectedRecipePosition] = useState({ x: 0, y: 0 });
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -109,45 +110,6 @@ export default function HomeScreen() {
       staleTime: 1000 * 60 * 30, // 30 minutes
     });
 
-  // Fetch today's AI-generated suggestions
-  const { data: todaySuggestionsResponse, isLoading: todaySuggestionsLoading, refetch: refetchTodaySuggestions } = useQuery({
-    queryKey: ["today-suggestions", auth?.user?.id],
-    queryFn: async () => {
-      if (!auth?.user?.id) return null;
-      
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const response = await fetch(`${apiUrl}/api/today-suggestions?userId=${auth.user.id}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch today's suggestions");
-      }
-      const result = await response.json();
-      // Return full response to access fallback flag
-      return result.success ? result : null;
-    },
-    enabled: !!auth?.user?.id && isAuthenticated,
-    staleTime: 1000 * 60 * 60, // 1 hour (suggestions refresh daily)
-    retry: 2,
-    // Poll every 30 seconds if we're showing fallback suggestions
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      // Enable polling if we're showing fallback suggestions
-      if (data?.fallback === true) {
-        return 30000; // Poll every 30 seconds
-      }
-      return false; // Stop polling when we have today's suggestions
-    },
-  });
-  
-  // Extract suggestions data and fallback flag
-  const todaySuggestions = todaySuggestionsResponse?.data || [];
-  const isShowingFallback = todaySuggestionsResponse?.fallback === true;
-  
-  // Filter suggestions by category
-  const filteredSuggestions = todaySuggestions && todaySuggestions.length > 0
-    ? (suggestionCategory === "all" 
-        ? todaySuggestions 
-        : todaySuggestions.filter(r => r.category === suggestionCategory))
-    : [];
 
   // Accept recommendation mutation
   const acceptRecommendationMutation = useMutation({
@@ -176,38 +138,21 @@ export default function HomeScreen() {
     },
   });
 
-  // Regenerate today's suggestions mutation
-  const regenerateSuggestionsMutation = useMutation({
-    mutationFn: async () => {
-      if (!auth?.user?.id) return null;
-      
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const response = await fetch(`${apiUrl}/api/today-suggestions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: auth.user.id,
-        }),
-      });
+  const handleVoiceButtonPress = () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign In Required", "Please sign in to use voice suggestions", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => signIn() },
+      ]);
+      return;
+    }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to regenerate suggestions");
-      }
-      const result = await response.json();
-      return result.success ? result.data : null;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["today-suggestions"]);
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-      Alert.alert("Success", "Today's suggestions have been refreshed!");
-    },
-    onError: (error) => {
-      Alert.alert("Error", error.message || "Failed to regenerate suggestions");
-    },
-  });
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    setVoiceModalVisible(true);
+  };
 
 
   const handleMenuPress = () => {
@@ -254,28 +199,6 @@ export default function HomeScreen() {
     router.push(`/recipe-detail?id=${recipe.id}`);
   };
 
-  const handleRegenerateSuggestions = () => {
-    if (!isAuthenticated) {
-      Alert.alert("Sign In Required", "Please sign in to regenerate suggestions", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign In", onPress: () => signIn() },
-      ]);
-      return;
-    }
-
-    Alert.alert(
-      "Regenerate Suggestions",
-      "Generate new recipe suggestions for today? (You can do this up to 2 times per day)",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Regenerate", 
-          onPress: () => regenerateSuggestionsMutation.mutate(),
-          style: "default"
-        },
-      ]
-    );
-  };
 
   // Favorite recipe mutation
   const favoriteRecipeMutation = useMutation({
@@ -300,7 +223,6 @@ export default function HomeScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["today-suggestions"]);
       queryClient.invalidateQueries(["saved-recipes"]);
       setLongPressModalVisible(false);
       if (Platform.OS !== "web") {
@@ -340,22 +262,6 @@ export default function HomeScreen() {
       // variables is the recipeId we passed to mutate()
       const recipeId = variables;
       
-      // Optimistically remove from UI immediately (no waiting for refetch)
-      queryClient.setQueryData(["today-suggestions", auth?.user?.id], (oldData) => {
-        // oldData is the full response object: { success, data: [...], fallback, ... }
-        if (!oldData || !oldData.data || !Array.isArray(oldData.data)) {
-          return oldData; // Return unchanged if data structure is invalid
-        }
-        
-        // Filter the data array and return new response object
-        return {
-          ...oldData,
-          data: oldData.data.filter(recipe => recipe.id !== recipeId),
-        };
-      });
-      
-      // Also invalidate to sync with backend
-      queryClient.invalidateQueries(["today-suggestions"]);
       
       setLongPressModalVisible(false);
       if (Platform.OS !== "web") {
@@ -593,193 +499,44 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Today's Suggestions Section */}
+        {/* Voice Suggestions Section - Replaces Today's Suggestions */}
         {isAuthenticated && (
-          <View style={styles.suggestionsSection}>
-            <View style={styles.suggestionsHeader}>
-              <Text
-                style={[
-                  styles.suggestionsTitle,
-                  { fontFamily: "Inter_700Bold" },
-                ]}
-              >
-                Today's Suggestions
-              </Text>
-              <TouchableOpacity
-                style={styles.refreshButton}
-                onPress={handleRegenerateSuggestions}
-                disabled={regenerateSuggestionsMutation.isPending || todaySuggestionsLoading}
-              >
-                <Text
-                  style={[
-                    styles.refreshButtonText,
-                    { fontFamily: "Inter_500Medium" },
-                  ]}
-                >
-                  {regenerateSuggestionsMutation.isPending || todaySuggestionsLoading ? "..." : "↻"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Category Filters */}
-            {todaySuggestions && todaySuggestions.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.categoryFilterScroller}
-                contentContainerStyle={styles.categoryFilterContent}
-              >
-                {[
-                  { id: "all", name: "All", emoji: "🍽️" },
-                  { id: "breakfast", name: "Breakfast", emoji: "🍳" },
-                  { id: "lunch", name: "Lunch", emoji: "🥗" },
-                  { id: "dinner", name: "Dinner", emoji: "🍽️" },
-                  { id: "dessert", name: "Dessert", emoji: "🍰" },
-                  { id: "snack", name: "Snack", emoji: "🍿" },
-                ].map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.categoryFilterPill,
-                      suggestionCategory === category.id && styles.categoryFilterPillActive,
-                    ]}
-                    onPress={() => {
-                      setSuggestionCategory(category.id);
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }
-                    }}
-                  >
-                    <Text style={styles.categoryFilterEmoji}>{category.emoji}</Text>
-                    <Text
-                      style={[
-                        styles.categoryFilterText,
-                        { fontFamily: "Inter_600SemiBold" },
-                        suggestionCategory === category.id && styles.categoryFilterTextActive,
-                      ]}
-                    >
-                      {category.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            {/* Loading State with Progress Indicator */}
-            {todaySuggestionsLoading ? (
-              <View style={styles.suggestionsLoadingContainer}>
-                <ActivityIndicator size="large" color="#FF9F1C" />
-                <Text
-                  style={[
-                    styles.suggestionsLoadingText,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Generating personalized recipes for you...
-                </Text>
-                <Text
-                  style={[
-                    styles.suggestionsLoadingSubtext,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  This may take 10-20 seconds
-                </Text>
+          <View style={styles.voiceSection}>
+            <TouchableOpacity
+              style={styles.voiceButton}
+              onPress={handleVoiceButtonPress}
+              activeOpacity={0.8}
+            >
+              <View style={styles.voiceButtonGlow} />
+              <View style={styles.voiceButtonInner}>
+                <Mic size={32} color="#FFFFFF" />
               </View>
-            ) : filteredSuggestions && filteredSuggestions.length > 0 ? (
-              <View style={styles.suggestionsGrid}>
-                {filteredSuggestions.map((recipe, index) => (
-                  <TouchableOpacity
-                    key={recipe.id}
-                    style={[
-                      styles.suggestionCard,
-                      { marginRight: index % 2 === 0 ? 12 : 0 },
-                    ]}
-                    onPress={() => handleRecipePress(recipe)}
-                    onLongPress={(e) => handleLongPress(recipe, e)}
-                  >
-                    {/* Recipe Image */}
-                    {recipe.image_url ? (
-                      <Image
-                        source={{ uri: recipe.image_url }}
-                        style={styles.suggestionImage}
-                        contentFit="cover"
-                        transition={200}
-                      />
-                    ) : (
-                      <View style={styles.suggestionImagePlaceholder}>
-                        <Text style={styles.suggestionPlaceholderEmoji}>🍽️</Text>
-                      </View>
-                    )}
-                    
-                    {/* Recipe Content */}
-                    <View style={styles.suggestionCardContent}>
-                      <Text
-                        style={[
-                          styles.suggestionTitle,
-                          { fontFamily: "Inter_600SemiBold" },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {recipe.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.suggestionMeta,
-                          { fontFamily: "Inter_400Regular" },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {recipe.cooking_time || 30} mins • {recipe.cuisine || "International"}
-                      </Text>
-                      <View style={styles.recipeStats}>
-                        <Text
-                          style={[
-                            styles.rating,
-                            { fontFamily: "Inter_400Regular" },
-                          ]}
-                        >
-                          ⭐ {recipe.average_rating || 4.0}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.ingredients,
-                            { fontFamily: "Inter_400Regular" },
-                          ]}
-                        >
-                          {recipe.ingredients?.length || 0} ingredients
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : todaySuggestions && todaySuggestions.length === 0 ? (
-              <View style={styles.suggestionsEmptyContainer}>
-                <Text
-                  style={[
-                    styles.suggestionsEmptyText,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  No suggestions available. Pull to refresh.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.suggestionsEmptyContainer}>
-                <Text
-                  style={[
-                    styles.suggestionsEmptyText,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  No {suggestionCategory !== "all" ? suggestionCategory : ""} suggestions found. Try another category.
-                </Text>
-              </View>
-            )}
+            </TouchableOpacity>
+            <Text
+              style={[
+                styles.voiceTitle,
+                { fontFamily: "Inter_700Bold" },
+              ]}
+            >
+              What's the vibe?
+            </Text>
+            <Text
+              style={[
+                styles.voiceExample,
+                { fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              "I'm tired and want something sweet in 10 minutes..."
+            </Text>
           </View>
         )}
       </ScrollView>
+
+      {/* Voice Suggestions Modal */}
+      <VoiceSuggestions
+        visible={voiceModalVisible}
+        onClose={() => setVoiceModalVisible(false)}
+      />
 
       {/* Long Press Modal for Quick Actions */}
       <Modal
@@ -1049,149 +806,51 @@ const styles = StyleSheet.create({
   promoEmoji: {
     fontSize: 40,
   },
-  suggestionsSection: {
+  voiceSection: {
     marginTop: 24,
     marginBottom: 20,
-  },
-  suggestionsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    paddingVertical: 32,
   },
-  suggestionsTitle: {
-    fontSize: 22,
-    color: "#000000",
-  },
-  refreshButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#F8F8F8",
+  voiceButton: {
+    width: 120,
+    height: 120,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 24,
+    position: "relative",
   },
-  refreshButtonText: {
-    fontSize: 18,
-    color: "#000000",
-  },
-  categoryFilterScroller: {
-    marginBottom: 16,
-  },
-  categoryFilterContent: {
-    paddingRight: 16,
-  },
-  categoryFilterPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8F8F8",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 12,
-  },
-  categoryFilterPillActive: {
-    backgroundColor: "#000000",
-  },
-  categoryFilterEmoji: {
-    fontSize: 16,
-    marginRight: 6,
-  },
-  categoryFilterText: {
-    fontSize: 14,
-    color: "#666666",
-  },
-  categoryFilterTextActive: {
-    color: "#FFFFFF",
-  },
-  suggestionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  suggestionCard: {
-    width: cardWidth,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  suggestionImage: {
-    width: "100%",
+  voiceButtonGlow: {
+    position: "absolute",
+    width: 140,
     height: 140,
-    backgroundColor: "#F8F9FA",
-  },
-  suggestionImagePlaceholder: {
-    width: "100%",
-    height: 140,
-    backgroundColor: "#F8F9FA",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  suggestionPlaceholderEmoji: {
-    fontSize: 48,
+    borderRadius: 70,
+    backgroundColor: "#FF9F1C",
     opacity: 0.3,
   },
-  suggestionCardContent: {
-    padding: 12,
+  voiceButtonInner: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#FF9F1C",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#FF9F1C",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  suggestionTitle: {
-    fontSize: 16,
+  voiceTitle: {
+    fontSize: 24,
     color: "#000000",
     marginBottom: 8,
-    lineHeight: 22,
   },
-  suggestionMeta: {
-    fontSize: 12,
-    color: "#666666",
-    marginBottom: 8,
-  },
-  recipeStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  rating: {
-    fontSize: 12,
-    color: "#666666",
-  },
-  ingredients: {
-    fontSize: 12,
-    color: "#666666",
-  },
-  suggestionsLoadingContainer: {
-    paddingVertical: 60,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  suggestionsLoadingText: {
+  voiceExample: {
     fontSize: 16,
-    color: "#000000",
-    textAlign: "center",
-    marginTop: 16,
-    fontWeight: "500",
-  },
-  suggestionsLoadingSubtext: {
-    fontSize: 14,
     color: "#666666",
     textAlign: "center",
-    marginTop: 8,
-  },
-  suggestionsEmptyContainer: {
-    paddingVertical: 40,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  suggestionsEmptyText: {
-    fontSize: 14,
-    color: "#999999",
-    textAlign: "center",
+    fontStyle: "italic",
   },
   modalOverlay: {
     flex: 1,

@@ -45,6 +45,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useUpload } from "@/utils/useUpload";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 export default function FoodRecognitionScreen() {
   const insets = useSafeAreaInsets();
@@ -835,17 +836,25 @@ export default function FoodRecognitionScreen() {
                         >
                           Ingredients
                         </Text>
-                        {recognitionResult.generatedRecipe.ingredients.map((ing, idx) => (
-                          <Text
-                            key={idx}
-                            style={[
-                              styles.previewItem,
-                              { fontFamily: "Inter_400Regular" },
-                            ]}
-                          >
-                            • {typeof ing === 'string' ? ing : `${ing.amount || ''} ${ing.unit || ''} ${ing.name || ing.ingredient || ''}`.trim()}
-                          </Text>
-                        ))}
+                        {recognitionResult.generatedRecipe.ingredients.map((ing, idx) => {
+                          const ingredientName = typeof ing === 'string' ? ing : (ing.name || ing.ingredient || '');
+                          const ingredientText = typeof ing === 'string' ? ing : `${ing.amount || ''} ${ing.unit || ''} ${ingredientName}`.trim();
+                          return (
+                            <View key={idx} style={styles.ingredientRow}>
+                              <Text style={styles.ingredientEmoji}>
+                                {getIngredientIcon(ingredientName)}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.previewItem,
+                                  { fontFamily: "Inter_400Regular" },
+                                ]}
+                              >
+                                {ingredientText}
+                              </Text>
+                            </View>
+                          );
+                        })}
                       </View>
                     )}
 
@@ -1357,6 +1366,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#000000",
     marginBottom: 8,
+  },
+  ingredientRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  ingredientEmoji: {
+    fontSize: 20,
+    width: 28,
+    textAlign: "center",
   },
   previewItem: {
     fontSize: 13,

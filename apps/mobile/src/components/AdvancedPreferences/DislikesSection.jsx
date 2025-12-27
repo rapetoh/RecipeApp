@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { X as XIcon, Plus } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 export function DislikesSection({
   dislikes = [],
@@ -56,6 +57,9 @@ export function DislikesSection({
               ]}
               onPress={() => handleQuickAdd(dislike)}
             >
+              <Text style={styles.quickAddEmoji}>
+                {getIngredientIcon(dislike)}
+              </Text>
               <Text
                 style={[
                   styles.quickAddText,
@@ -92,6 +96,9 @@ export function DislikesSection({
           <View style={styles.selectedGrid}>
             {dislikes.map((dislike, index) => (
               <View key={index} style={styles.selectedTag}>
+                <Text style={styles.selectedTagEmoji}>
+                  {getIngredientIcon(dislike)}
+                </Text>
                 <Text
                   style={[
                     styles.selectedTagText,
@@ -145,16 +152,22 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   quickAddChip: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F8F9FA",
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 2,
     borderColor: "transparent",
+    gap: 8,
   },
   quickAddChipSelected: {
     borderColor: "#F59E0B",
     backgroundColor: "#FFFBEB",
+  },
+  quickAddEmoji: {
+    fontSize: 18,
   },
   quickAddText: {
     fontSize: 14,
@@ -200,6 +213,9 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: "#F59E0B",
+  },
+  selectedTagEmoji: {
+    fontSize: 16,
   },
   selectedTagText: {
     fontSize: 12,

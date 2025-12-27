@@ -39,6 +39,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 export default function GroceryListsScreen() {
   const insets = useSafeAreaInsets();
@@ -794,6 +795,9 @@ export default function GroceryListsScreen() {
                           />
                       )}
                     </View>
+                    <Text style={styles.itemEmoji}>
+                      {getIngredientIcon(itemName)}
+                    </Text>
                     <View style={styles.itemInfo}>
                       <Text
                         style={[
@@ -1299,6 +1303,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    gap: 12,
+  },
+  itemEmoji: {
+    fontSize: 28,
+    width: 40,
+    textAlign: "center",
   },
   checkboxContainer: {
     marginRight: 12,

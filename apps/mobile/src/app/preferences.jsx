@@ -47,6 +47,7 @@ import {
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 const GOALS_OPTIONS = [
   { id: "save_time", label: "Save time", icon: Target, color: "#FF6B6B" },
@@ -826,6 +827,9 @@ export default function PreferencesScreen() {
               <View style={styles.selectedTagsGrid}>
                 {dislikedIngredients.map((ingredient, index) => (
                   <View key={index} style={styles.selectedTag}>
+                    <Text style={styles.selectedTagEmoji}>
+                      {getIngredientIcon(ingredient)}
+                    </Text>
                     <Text
                       style={[
                         styles.selectedTagText,
@@ -1523,6 +1527,9 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: "#FF6B6B",
+  },
+  selectedTagEmoji: {
+    fontSize: 18,
   },
   selectedTagText: {
     fontSize: 12,

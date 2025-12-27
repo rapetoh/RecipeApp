@@ -20,6 +20,7 @@ import {
 import { ArrowRight, ArrowLeft, Globe, X } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 const CUISINE_OPTIONS = [
   { id: "african", label: "African", emoji: "🌍" },
@@ -255,6 +256,9 @@ export default function OnboardingCuisinesScreen() {
                   ]}
                   onPress={() => handleDislikePress(ingredient)}
                 >
+                  <Text style={styles.dislikeEmoji}>
+                    {getIngredientIcon(ingredient)}
+                  </Text>
                   <Text
                     style={[
                       styles.dislikeLabel,
@@ -316,6 +320,9 @@ export default function OnboardingCuisinesScreen() {
               <View style={styles.selectedDislikesGrid}>
                 {dislikedIngredients.map((ingredient, index) => (
                   <View key={index} style={styles.selectedDislikeTag}>
+                    <Text style={styles.selectedDislikeEmoji}>
+                      {getIngredientIcon(ingredient)}
+                    </Text>
                     <Text
                       style={[
                         styles.selectedDislikeText,
@@ -461,16 +468,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   dislikeChip: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F8F9FA",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 2,
     borderColor: "transparent",
+    gap: 8,
   },
   dislikeChipSelected: {
     borderColor: "#FF6B6B",
     backgroundColor: "#FFF5F5",
+  },
+  dislikeEmoji: {
+    fontSize: 18,
   },
   dislikeLabel: {
     fontSize: 13,
@@ -532,6 +545,9 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: "#FF6B6B",
+  },
+  selectedDislikeEmoji: {
+    fontSize: 16,
   },
   selectedDislikeText: {
     fontSize: 12,

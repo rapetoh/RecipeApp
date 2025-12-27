@@ -34,6 +34,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { RecipeActionButtons } from "./RecipeActionButtons";
 import { MealPlanModal } from "./MealPlanModal";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -347,14 +348,19 @@ export default function RecipeDetailScreen() {
 
   const renderIngredientItem = ({ item }) => (
     <View style={styles.ingredientItem}>
-      <Text
-        style={[styles.ingredientAmount, { fontFamily: "Inter_600SemiBold" }]}
-      >
-        {item.amount} {item.unit}
+      <Text style={styles.ingredientEmoji}>
+        {getIngredientIcon(item)}
       </Text>
-      <Text style={[styles.ingredientName, { fontFamily: "Inter_400Regular" }]}>
-        {item.name}
-      </Text>
+      <View style={styles.ingredientTextContainer}>
+        <Text
+          style={[styles.ingredientAmount, { fontFamily: "Inter_600SemiBold" }]}
+        >
+          {item.amount} {item.unit}
+        </Text>
+        <Text style={[styles.ingredientName, { fontFamily: "Inter_400Regular" }]}>
+          {item.name}
+        </Text>
+      </View>
     </View>
   );
 
@@ -861,9 +867,22 @@ const styles = StyleSheet.create({
   ingredientItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
+    gap: 12,
+  },
+  ingredientEmoji: {
+    fontSize: 28,
+    width: 40,
+    textAlign: "center",
+  },
+  ingredientTextContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   ingredientAmount: {
     fontSize: 14,
