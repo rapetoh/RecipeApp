@@ -6,20 +6,45 @@ async function getUserPreferences(userId) {
   if (!userId) return null;
   
   try {
-    const userPrefs = await sql`
-      SELECT 
-        diet_type,
-        allergies,
-        dislikes,
-        preferred_cuisines,
-        goals,
-        cooking_skill,
-        preferred_cooking_time,
-        people_count,
-        apply_preferences_in_assistant
-      FROM users
-      WHERE id = ${userId}::uuid
+    // Check if apply_preferences_in_assistant column exists
+    const columnExists = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'users' 
+      AND column_name = 'apply_preferences_in_assistant'
     `;
+    
+    const hasApplyPreferencesColumn = columnExists.length > 0;
+    
+    // Conditionally include apply_preferences_in_assistant if column exists
+    const userPrefs = hasApplyPreferencesColumn
+      ? await sql`
+          SELECT 
+            diet_type,
+            allergies,
+            dislikes,
+            preferred_cuisines,
+            goals,
+            cooking_skill,
+            preferred_cooking_time,
+            people_count,
+            apply_preferences_in_assistant
+          FROM users
+          WHERE id = ${userId}::uuid
+        `
+      : await sql`
+          SELECT 
+            diet_type,
+            allergies,
+            dislikes,
+            preferred_cuisines,
+            goals,
+            cooking_skill,
+            preferred_cooking_time,
+            people_count
+          FROM users
+          WHERE id = ${userId}::uuid
+        `;
     
     if (userPrefs.length === 0) return null;
     
@@ -35,7 +60,9 @@ async function getUserPreferences(userId) {
       cookingSkill: prefs.cooking_skill || "beginner",
       preferredCookingTime: prefs.preferred_cooking_time || "15_30",
       peopleCount: prefs.people_count || 1,
-      applyPreferencesInAssistant: prefs.apply_preferences_in_assistant !== false, // Default to true
+      applyPreferencesInAssistant: hasApplyPreferencesColumn 
+        ? (prefs.apply_preferences_in_assistant !== false) 
+        : true, // Default to true if column doesn't exist
     };
   } catch (error) {
     console.error("Error fetching user preferences:", error);

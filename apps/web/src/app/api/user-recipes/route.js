@@ -95,10 +95,9 @@ export async function GET(request) {
         SELECT 
           id, name, description, category, cuisine, cooking_time, prep_time,
           difficulty, servings, ingredients, instructions, image_url,
-          tags, created_at, updated_at
+          tags, created_at, updated_at, creator_type
         FROM recipes 
         WHERE creator_user_id = ${userId}::uuid
-        AND creator_type = 'user'
         AND (
           LOWER(name) LIKE LOWER(${searchPattern}) OR 
           LOWER(description) LIKE LOWER(${searchPattern})
@@ -111,7 +110,6 @@ export async function GET(request) {
         SELECT COUNT(*) as count
         FROM recipes 
         WHERE creator_user_id = ${userId}::uuid
-        AND creator_type = 'user'
         AND (
           LOWER(name) LIKE LOWER(${searchPattern}) OR 
           LOWER(description) LIKE LOWER(${searchPattern})
@@ -123,10 +121,9 @@ export async function GET(request) {
         SELECT 
           id, name, description, category, cuisine, cooking_time, prep_time,
           difficulty, servings, ingredients, instructions, image_url,
-          tags, created_at, updated_at
+          tags, created_at, updated_at, creator_type
         FROM recipes 
         WHERE creator_user_id = ${userId}::uuid
-        AND creator_type = 'user'
         ORDER BY updated_at DESC, created_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `;
@@ -135,7 +132,6 @@ export async function GET(request) {
         SELECT COUNT(*) as count
         FROM recipes 
         WHERE creator_user_id = ${userId}::uuid
-        AND creator_type = 'user'
       `;
       total = parseInt(countResult[0]?.count || 0);
     }
