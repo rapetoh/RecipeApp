@@ -13,11 +13,51 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 // In production build, __dirname is build/server/, routes are at build/server/app/api
 // In development, __dirname is src/, routes are at src/app/api
 const isProduction = process.env.NODE_ENV === 'production';
-let API_DIR = join(__dirname, 'app', 'api');
+const initialApiDir = join(__dirname, 'app', 'api');
 
 console.log('🔍 __dirname:', __dirname);
 console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
-console.log('🔍 Initial API_DIR:', API_DIR);
+console.log('🔍 Initial API_DIR:', initialApiDir);
+
+// Helper function to resolve API directory path (reused by handlers and registerRoutes)
+async function resolveApiDir(): Promise<string> {
+  try {
+    const dirStat = await stat(initialApiDir);
+    if (dirStat.isDirectory()) {
+      console.log('✅ API_DIR exists and is a directory:', initialApiDir);
+      return initialApiDir;
+    }
+  } catch (error) {
+    // Try alternative paths (same order as registerRoutes logic)
+    const altPaths = [
+      join(process.cwd(), 'src', 'app', 'api'),
+      join(process.cwd(), 'build', 'server', 'app', 'api'),
+      join(__dirname, '..', '..', 'src', 'app', 'api'),
+      join(__dirname, '..', 'app', 'api'),
+    ];
+    
+    for (const altPath of altPaths) {
+      try {
+        console.log(`🔍 Trying alternative path: ${altPath}`);
+        const altStat = await stat(altPath);
+        if (altStat.isDirectory()) {
+          console.log(`✅ Found alternative path, using: ${altPath}`);
+          return altPath;
+        }
+      } catch (e) {
+        // Continue to next alternative
+      }
+    }
+  }
+  
+  // Fallback to initial path
+  console.log('⚠️  Using fallback API_DIR:', initialApiDir);
+  return initialApiDir;
+}
+
+// Resolve API directory ONCE at startup (before handlers are defined)
+const RESOLVED_API_DIR = await resolveApiDir();
+console.log('✅ Resolved API directory:', RESOLVED_API_DIR);
 
 const app = new Hono();
 const api = new Hono(); // Separate Hono instance for API routes
@@ -55,7 +95,7 @@ app.post('/api/auth/signin', async (c) => {
   console.log('✅ POST /api/auth/signin received');
   try {
     const { pathToFileURL } = await import('node:url');
-    const signinRoutePath = join(__dirname, 'app/api/auth/signin/route.js');
+    const signinRoutePath = join(RESOLVED_API_DIR, 'auth', 'signin', 'route.js');
     const routeUrl = pathToFileURL(signinRoutePath).href;
     const route = await import(/* @vite-ignore */ `${routeUrl}?update=${Date.now()}`);
     const request = c.req.raw;
@@ -72,7 +112,7 @@ app.post('/api/auth/signup', async (c) => {
   console.log('✅ POST /api/auth/signup received');
   try {
     const { pathToFileURL } = await import('node:url');
-    const signupRoutePath = join(__dirname, 'app/api/auth/signup/route.js');
+    const signupRoutePath = join(RESOLVED_API_DIR, 'auth', 'signup', 'route.js');
     const routeUrl = pathToFileURL(signupRoutePath).href;
     const route = await import(/* @vite-ignore */ `${routeUrl}?update=${Date.now()}`);
     const request = c.req.raw;
@@ -170,51 +210,10 @@ async function findRouteFiles(dir: string): Promise<string[]> {
 // Register all API routes
 async function registerRoutes() {
   console.log('🔍 Starting route registration...');
-  console.log('🔍 Looking in:', API_DIR);
+  console.log('🔍 Using resolved API directory:', RESOLVED_API_DIR);
   
-  // Check if directory exists, try alternatives if not
-  let apiDirToUse: string = API_DIR;
-  try {
-    const dirStat = await stat(API_DIR);
-    if (!dirStat.isDirectory()) {
-      console.error('❌ API_DIR exists but is not a directory:', API_DIR);
-      // Will try alternatives below
-    } else {
-      console.log('✅ API_DIR exists and is a directory');
-    }
-  } catch (error) {
-    console.error('❌ API_DIR does not exist:', API_DIR);
-    console.error('Error details:', error);
-    
-    // Try alternative paths
-    const altPaths = [
-      join(process.cwd(), 'src', 'app', 'api'),
-      join(process.cwd(), 'build', 'server', 'app', 'api'),
-      join(__dirname, '..', '..', 'src', 'app', 'api'),
-      join(__dirname, '..', 'app', 'api'),
-    ];
-    
-    let found = false;
-    for (const altPath of altPaths) {
-      try {
-        console.log(`🔍 Trying alternative path: ${altPath}`);
-        const altStat = await stat(altPath);
-        if (altStat.isDirectory()) {
-          console.log(`✅ Found alternative path, using: ${altPath}`);
-          apiDirToUse = altPath;
-          found = true;
-          break;
-        }
-      } catch (e) {
-        // Continue to next alternative
-      }
-    }
-    
-    if (!found) {
-      console.error('❌ Could not find API directory in any expected location');
-      return;
-    }
-  }
+  // Use the pre-resolved API directory (already resolved at startup)
+  const apiDirToUse = RESOLVED_API_DIR;
 
   const routeFiles = await findRouteFiles(apiDirToUse).catch((err) => {
     console.error('❌ Error finding route files:', err);
