@@ -329,6 +329,23 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
   });
 });
 
+// CRITICAL FIX: In production, ensure /api/* routes are handled by Hono before React Router
+// This is needed because createHonoServer wraps the app and React Router may intercept POST requests
+// Add explicit handler that delegates to the API sub-app for all /api/* routes
+app.all('/api/*', async (c) => {
+  // Delegate to the api sub-app which has all our API routes registered
+  const response = await api.fetch(c.req.raw);
+  
+  // If the API sub-app handled it (status not 404), return it
+  if (response && response.status !== 404) {
+    return response;
+  }
+  
+  // If not found in API routes, return 404 (don't let React Router handle it)
+  console.warn(`⚠️  API route not found: ${c.req.path}`);
+  return c.json({ error: 'API route not found' }, 404);
+});
+
 export default await createHonoServer({
   app,
   defaultLogger: true,
