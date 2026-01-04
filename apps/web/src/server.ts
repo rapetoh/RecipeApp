@@ -14,6 +14,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 // In development, __dirname is src/, routes are at src/app/api
 const isProduction = process.env.NODE_ENV === 'production';
 let API_DIR = join(__dirname, 'app', 'api');
+let resolvedApiDir = API_DIR; // Store resolved API directory for use in route handlers
 
 console.log('🔍 __dirname:', __dirname);
 console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
@@ -202,6 +203,7 @@ async function registerRoutes() {
         if (altStat.isDirectory()) {
           console.log(`✅ Found alternative path, using: ${altPath}`);
           apiDirToUse = altPath;
+          resolvedApiDir = altPath; // Store for later use
           found = true;
           break;
         }
@@ -295,6 +297,7 @@ async function registerRoutes() {
 // Register routes before creating server
 await registerRoutes();
 console.log(`✅ Total Hono routes registered: ${api.routes.length}`);
+console.log(`📋 Registered routes:`, api.routes.map(r => `${r.method} ${r.path}`).join(', '));
 
 // CRITICAL: Mount API routes FIRST, before React Router
 // This ensures /api/* requests are handled by Hono, not React Router
@@ -329,21 +332,25 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
   });
 });
 
-// CRITICAL FIX: In production, ensure /api/* routes are handled by Hono before React Router
-// This is needed because createHonoServer wraps the app and React Router may intercept POST requests
-// Add explicit handler that delegates to the API sub-app for all /api/* routes
-app.all('/api/*', async (c) => {
-  // Delegate to the api sub-app which has all our API routes registered
-  const response = await api.fetch(c.req.raw);
-  
-  // If the API sub-app handled it (status not 404), return it
-  if (response && response.status !== 404) {
-    return response;
+// CRITICAL FIX: In production, React Router intercepts POST requests before Hono can handle them
+// Register critical routes directly on main app as fallback to ensure they work
+// This is a workaround for the createHonoServer wrapping issue
+app.post('/api/preferences', async (c) => {
+  try {
+    // Import and call the preferences route handler directly
+    const preferencesRoutePath = join(resolvedApiDir, 'preferences', 'route.js');
+    const routeUrl = pathToFileURL(preferencesRoutePath).href;
+    const route = await import(/* @vite-ignore */ `${routeUrl}?update=${Date.now()}`);
+    const request = c.req.raw;
+    console.log('✅ Handling /api/preferences POST via direct route');
+    return await route.POST(request);
+  } catch (error) {
+    console.error('❌ Error in preferences POST handler:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message, error.stack);
+    }
+    return c.json({ error: 'Internal server error' }, 500);
   }
-  
-  // If not found in API routes, return 404 (don't let React Router handle it)
-  console.warn(`⚠️  API route not found: ${c.req.path}`);
-  return c.json({ error: 'API route not found' }, 404);
 });
 
 export default await createHonoServer({
