@@ -32,6 +32,8 @@ import {
   Users,
   ChefHat,
   X,
+  Folder,
+  Check,
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -88,6 +90,8 @@ export default function RecipeFormScreen() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [newTag, setNewTag] = useState("");
   const [isGeneratedRecipe, setIsGeneratedRecipe] = useState(false); // Track if editing AI-generated recipe
+  const [collections, setCollections] = useState([]);
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fetch recipe for editing
@@ -132,6 +136,36 @@ export default function RecipeFormScreen() {
     enabled: isEditing && isAuthenticated && !!auth?.jwt,
   });
 
+  // Fetch collections
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections", auth?.user?.id],
+    queryFn: async () => {
+      const response = await fetch(`${apiUrl}/api/collections?userId=${auth?.user?.id}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch collections");
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    enabled: isAuthenticated && !!auth?.user?.id,
+  });
+
+  useEffect(() => {
+    if (collectionsData?.success && collectionsData.data) {
+      // Filter out system collections (only show custom collections for selection)
+      const customCollections = collectionsData.data.filter(c => c.collection_type === 'custom');
+      setCollections(customCollections);
+    }
+  }, [collectionsData]);
+
   // Populate form with existing recipe data
   useEffect(() => {
     if (recipeData?.success && recipeData.data) {
@@ -139,6 +173,11 @@ export default function RecipeFormScreen() {
       
       // Detect if this is an AI-generated recipe from main recipes table
       setIsGeneratedRecipe(recipe.creator_type === 'ai');
+      
+      // Set selected collections if editing
+      if (recipe.collectionIds && Array.isArray(recipe.collectionIds)) {
+        setSelectedCollectionIds(recipe.collectionIds);
+      }
       
       // Parse ingredients and instructions if they're JSON strings
       let ingredients = recipe.ingredients;
@@ -297,6 +336,7 @@ export default function RecipeFormScreen() {
         step: index + 1,
         instruction: inst.instruction.trim(),
       })),
+      collectionIds: selectedCollectionIds, // Include selected collections
     };
 
     saveMutation.mutate(cleanData);
@@ -404,6 +444,17 @@ export default function RecipeFormScreen() {
       ...formData,
       tags: formData.tags.filter((t) => t !== tag),
     });
+  };
+
+  const toggleCollection = (collectionId) => {
+    if (selectedCollectionIds.includes(collectionId)) {
+      setSelectedCollectionIds(selectedCollectionIds.filter(id => id !== collectionId));
+    } else {
+      setSelectedCollectionIds([...selectedCollectionIds, collectionId]);
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   };
 
   if (!fontsLoaded || (isEditing && fetchLoading)) return null;
@@ -820,6 +871,54 @@ export default function RecipeFormScreen() {
           ))}
         </View>
 
+        {/* Collections */}
+        {collections.length > 0 && (
+          <View style={styles.section}>
+            <Text
+              style={[styles.sectionTitle, { fontFamily: "Inter_600SemiBold" }]}
+            >
+              Collections
+            </Text>
+            <Text
+              style={[styles.sectionSubtitle, { fontFamily: "Inter_400Regular" }]}
+            >
+              Organize this recipe into collections
+            </Text>
+            <View style={styles.collectionsList}>
+              {collections.map((collection) => {
+                const isSelected = selectedCollectionIds.includes(collection.id);
+                return (
+                  <TouchableOpacity
+                    key={collection.id}
+                    style={[
+                      styles.collectionChip,
+                      isSelected && styles.collectionChipSelected,
+                    ]}
+                    onPress={() => toggleCollection(collection.id)}
+                  >
+                    <Folder
+                      size={16}
+                      color={isSelected ? "#FFFFFF" : "#666666"}
+                    />
+                    <Text
+                      style={[
+                        styles.collectionChipText,
+                        { fontFamily: "Inter_500Medium" },
+                        isSelected && styles.collectionChipTextSelected,
+                      ]}
+                    >
+                      {collection.name}
+                    </Text>
+                    {isSelected && (
+                      <Check size={16} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         {/* Tags */}
         <View style={styles.section}>
           <Text
@@ -1147,6 +1246,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
     minHeight: 60,
+  },
+
+  // Collections
+  sectionSubtitle: {
+    fontSize: 13,
+    color: "#666666",
+    marginBottom: 12,
+  },
+  collectionsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  collectionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  collectionChipSelected: {
+    backgroundColor: "#FF9F1C",
+    borderColor: "#FF9F1C",
+  },
+  collectionChipText: {
+    fontSize: 13,
+    color: "#666666",
+  },
+  collectionChipTextSelected: {
+    color: "#FFFFFF",
   },
 
   // Tags

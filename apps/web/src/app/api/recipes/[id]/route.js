@@ -26,16 +26,16 @@ export async function GET(request, { params }) {
 
     let recipe = recipes[0];
     
-    // Check if recipe is saved for the user if userId is provided
+    // Check if recipe is favorited for the user if userId is provided
     if (userId) {
-      const savedRecipe = await sql`
-        SELECT id FROM saved_recipes 
+      const favoritedRecipe = await sql`
+        SELECT id FROM recipe_favorites 
         WHERE user_id = ${userId}::uuid AND recipe_id = ${parseInt(id)}
         LIMIT 1
       `;
       recipe = {
         ...recipe,
-        is_saved: savedRecipe.length > 0,
+        is_saved: favoritedRecipe.length > 0,
       };
     } else {
       recipe = {

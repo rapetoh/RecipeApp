@@ -533,7 +533,11 @@ export default function MealPlanningScreen() {
         )}
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        showsVerticalScrollIndicator={false}
+      >
         {!isAuthenticated && (
           <View style={styles.authPrompt}>
             <Calendar size={48} color="#FF9F1C" />

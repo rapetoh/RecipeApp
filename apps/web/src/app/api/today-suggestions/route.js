@@ -1,6 +1,5 @@
 import sql from "@/app/api/utils/sql";
 import { generateTodaySuggestions } from "@/app/api/utils/openai";
-import { generateImageWithDALLE } from "@/app/api/utils/openai";
 
 // Helper function to generate suggestions for a date (can be called async in background)
 async function generateSuggestionsForDate(userId, date) {
@@ -142,13 +141,8 @@ async function generateSuggestionsForDate(userId, date) {
     // Save recipes to database and link them
     for (const recipeData of generatedRecipes) {
       try {
-        // Generate image for recipe
-        let imageUrl = null;
-        try {
-          imageUrl = await generateImageWithDALLE(recipeData.name);
-        } catch (imgError) {
-          console.warn("Failed to generate image for recipe:", recipeData.name, imgError);
-        }
+        // No image generation - will use placeholder in frontend
+        const imageUrl = null;
 
         // Save recipe to database
         const savedRecipe = await sql`
@@ -491,14 +485,8 @@ export async function GET(request) {
 
     for (const recipeData of generatedRecipes) {
       try {
-        // Generate image for recipe (optional, but makes it look better)
-        let imageUrl = null;
-        try {
-          imageUrl = await generateImageWithDALLE(recipeData.name);
-        } catch (imgError) {
-          console.warn("Failed to generate image for recipe:", recipeData.name, imgError);
-          // Continue without image
-        }
+        // No image generation - will use placeholder in frontend
+        const imageUrl = null;
 
         // Save recipe to database
         const savedRecipe = await sql`

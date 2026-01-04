@@ -28,7 +28,8 @@ async function getUserPreferences(userId) {
             cooking_skill,
             preferred_cooking_time,
             people_count,
-            apply_preferences_in_assistant
+            apply_preferences_in_assistant,
+            measurement_system
           FROM users
           WHERE id = ${userId}::uuid
         `
@@ -41,7 +42,8 @@ async function getUserPreferences(userId) {
             goals,
             cooking_skill,
             preferred_cooking_time,
-            people_count
+            people_count,
+            measurement_system
           FROM users
           WHERE id = ${userId}::uuid
         `;
@@ -63,6 +65,7 @@ async function getUserPreferences(userId) {
       applyPreferencesInAssistant: hasApplyPreferencesColumn 
         ? (prefs.apply_preferences_in_assistant !== false) 
         : true, // Default to true if column doesn't exist
+      measurementSystem: prefs.measurement_system || "metric",
     };
   } catch (error) {
     console.error("Error fetching user preferences:", error);
@@ -203,13 +206,15 @@ export async function POST(request) {
       // Fetch user preferences if userId is provided
       const userPreferences = await getUserPreferences(userId);
       const applyPreferences = userPreferences?.applyPreferencesInAssistant !== false; // Default to true
+      const measurementSystem = userPreferences?.measurementSystem || "metric";
 
       try {
         const recipeJson = await generateRecipeWithGPT(
           analysisJson.dish_name, 
           analysisJson,
           userPreferences,
-          applyPreferences
+          applyPreferences,
+          measurementSystem
         );
 
         console.log("Recipe Json:", recipeJson);

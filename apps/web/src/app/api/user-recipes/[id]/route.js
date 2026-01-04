@@ -98,9 +98,30 @@ export async function GET(request, { params }) {
       );
     }
 
+    // Get collections this recipe belongs to (only custom collections for editing)
+    const collections = await sql`
+      SELECT rc.id, rc.name, rc.collection_type
+      FROM collection_recipes cr
+      JOIN recipe_collections rc ON cr.collection_id = rc.id
+      WHERE cr.recipe_id = ${parseInt(id)}
+      AND rc.collection_type = 'custom'
+      AND rc.user_id = ${userId}::uuid
+    `;
+
+    // Check if recipe is favorited
+    const favoritedRecipe = await sql`
+      SELECT id FROM recipe_favorites 
+      WHERE user_id = ${userId}::uuid AND recipe_id = ${parseInt(id)}
+      LIMIT 1
+    `;
+
+    const recipe = recipes[0];
+    recipe.collectionIds = collections.map(c => c.id);
+    recipe.is_saved = favoritedRecipe.length > 0;
+
     return Response.json({
       success: true,
-      data: recipes[0],
+      data: recipe,
     });
   } catch (error) {
     console.error("Error fetching recipe:", error);
@@ -137,6 +158,7 @@ export async function PUT(request, { params }) {
       instructions,
       image_url,
       tags,
+      collectionIds, // Array of collection IDs to add recipe to
     } = body;
 
     // Check if recipe exists and belongs to user
@@ -202,6 +224,88 @@ export async function PUT(request, { params }) {
       AND creator_type = 'user'
       RETURNING *
     `;
+
+    const recipeId = parseInt(id);
+
+    // Update collections if provided
+    if (collectionIds !== undefined) {
+      // Get current collections (excluding system collections as they're auto-managed)
+      const currentCollections = await sql`
+        SELECT cr.collection_id
+        FROM collection_recipes cr
+        JOIN recipe_collections rc ON cr.collection_id = rc.id
+        WHERE cr.recipe_id = ${recipeId}
+        AND rc.collection_type = 'custom'
+      `;
+      const currentCollectionIds = currentCollections.map(c => c.collection_id);
+
+      const newCollectionIds = Array.isArray(collectionIds) ? collectionIds : [];
+      
+      // Always ensure "My Creations" is included (but don't add it to newCollectionIds as it's auto-managed)
+      const myCreationsCollection = await sql`
+        SELECT id FROM recipe_collections
+        WHERE user_id = ${userId}::uuid
+        AND system_type = 'my_creations'
+        LIMIT 1
+      `;
+      
+      if (myCreationsCollection.length > 0) {
+        const myCreationsId = myCreationsCollection[0].id;
+        // Ensure recipe is in My Creations
+        await sql`
+          INSERT INTO collection_recipes (collection_id, recipe_id)
+          VALUES (${myCreationsId}, ${recipeId})
+          ON CONFLICT (collection_id, recipe_id) DO NOTHING
+        `;
+      }
+
+      // Find collections to add and remove
+      const toAdd = newCollectionIds.filter(id => !currentCollectionIds.includes(id));
+      const toRemove = currentCollectionIds.filter(id => !newCollectionIds.includes(id));
+
+      // Remove from collections
+      for (const collectionId of toRemove) {
+        await sql`
+          DELETE FROM collection_recipes
+          WHERE collection_id = ${collectionId} AND recipe_id = ${recipeId}
+        `;
+        
+        // Update recipe count
+        await sql`
+          UPDATE recipe_collections
+          SET recipe_count = (SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${collectionId})
+          WHERE id = ${collectionId}
+        `;
+      }
+
+      // Add to new collections
+      for (const collectionId of toAdd) {
+        try {
+          // Verify collection belongs to user
+          const collection = await sql`
+            SELECT id FROM recipe_collections
+            WHERE id = ${collectionId} AND user_id = ${userId}::uuid
+          `;
+          
+          if (collection.length > 0) {
+            await sql`
+              INSERT INTO collection_recipes (collection_id, recipe_id)
+              VALUES (${collectionId}, ${recipeId})
+              ON CONFLICT (collection_id, recipe_id) DO NOTHING
+            `;
+            
+            // Update recipe count
+            await sql`
+              UPDATE recipe_collections
+              SET recipe_count = (SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${collectionId})
+              WHERE id = ${collectionId}
+            `;
+          }
+        } catch (error) {
+          console.error(`Error adding recipe to collection ${collectionId}:`, error);
+        }
+      }
+    }
 
     return Response.json({
       success: true,

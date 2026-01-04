@@ -34,7 +34,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { RecipeActionButtons } from "./RecipeActionButtons";
 import { MealPlanModal } from "./MealPlanModal";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
+import { convertIngredients } from "@/utils/unitConverter";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -70,13 +71,33 @@ export default function RecipeDetailScreen() {
     Inter_700Bold,
   });
 
+  // Fetch user preferences for measurement system
+  const { data: preferencesData } = useQuery({
+    queryKey: ["preferences", auth?.user?.id],
+    queryFn: async () => {
+      if (!auth?.user?.id) return null;
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      try {
+        const response = await fetch(`${apiUrl}/api/preferences?userId=${auth.user.id}`);
+        if (response.ok) {
+          const result = await response.json();
+          return result.success ? result.data : null;
+        }
+      } catch (error) {
+        console.error("Error fetching preferences:", error);
+      }
+      return null;
+    },
+    enabled: !!auth?.user?.id,
+  });
+
   // Fetch recipe details
   const {
     data: recipeData,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["recipe", id],
+    queryKey: ["recipe", id, auth?.user?.id],
     queryFn: async () => {
       if (!id) {
         throw new Error("Recipe ID is required");
@@ -127,11 +148,21 @@ export default function RecipeDetailScreen() {
     },
   });
 
-  // Save/unsave recipe mutation
-  const saveRecipeMutation = useMutation({
+  // Update isFavorited when recipeData changes (handles cached data)
+  useEffect(() => {
+    if (recipeData?.success && recipeData?.data) {
+      setIsFavorited(recipeData.data.is_saved || false);
+    } else if (recipeData?.data && !recipeData?.success) {
+      // Handle case where data exists but success field is missing
+      setIsFavorited(recipeData.data.is_saved || false);
+    }
+  }, [recipeData]);
+
+  // Favorite/unfavorite recipe mutation
+  const favoriteRecipeMutation = useMutation({
     mutationFn: async (action) => {
       if (!isAuthenticated) {
-        throw new Error("Please sign in to save recipes");
+        throw new Error("Please sign in to favorite recipes");
       }
 
       if (!id) {
@@ -139,7 +170,7 @@ export default function RecipeDetailScreen() {
       }
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-      const url = `${apiUrl}/api/saved-recipes`;
+      const url = `${apiUrl}/api/recipe-favorites`;
 
       if (action === "save") {
         const response = await fetch(url, {
@@ -153,7 +184,7 @@ export default function RecipeDetailScreen() {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || "Failed to save recipe");
+          throw new Error(errorData.error || "Failed to favorite recipe");
         }
 
         return response.json();
@@ -165,7 +196,7 @@ export default function RecipeDetailScreen() {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || "Failed to remove recipe");
+          throw new Error(errorData.error || "Failed to unfavorite recipe");
         }
 
         return response.json();
@@ -173,13 +204,14 @@ export default function RecipeDetailScreen() {
     },
     onSuccess: (data, action) => {
       setIsFavorited(action === "save");
-      queryClient.invalidateQueries(["saved-recipes"]);
+      queryClient.invalidateQueries(["recipe-favorites"]);
+      queryClient.invalidateQueries({ queryKey: ["recipe", id] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     },
     onError: (error) => {
-      console.error("Save recipe error:", error);
+      console.error("Favorite recipe error:", error);
       Alert.alert("Error", error.message);
     },
   });
@@ -197,7 +229,7 @@ export default function RecipeDetailScreen() {
     }
 
     if (!isAuthenticated) {
-      Alert.alert("Sign In Required", "Please sign in to save recipes", [
+      Alert.alert("Sign In Required", "Please sign in to favorite recipes", [
         { text: "Cancel", style: "cancel" },
         { text: "Sign In", onPress: () => signIn() },
       ]);
@@ -205,7 +237,7 @@ export default function RecipeDetailScreen() {
     }
 
     const action = isFavorited ? "unsave" : "save";
-    saveRecipeMutation.mutate(action);
+    favoriteRecipeMutation.mutate(action);
   };
 
   // Generate next 14 days for meal plan modal
@@ -346,23 +378,23 @@ export default function RecipeDetailScreen() {
     </View>
   );
 
-  const renderIngredientItem = ({ item }) => (
-    <View style={styles.ingredientItem}>
-      <Text style={styles.ingredientEmoji}>
-        {getIngredientIcon(item)}
-      </Text>
-      <View style={styles.ingredientTextContainer}>
-        <Text
-          style={[styles.ingredientAmount, { fontFamily: "Inter_600SemiBold" }]}
-        >
-          {item.amount} {item.unit}
-        </Text>
-        <Text style={[styles.ingredientName, { fontFamily: "Inter_400Regular" }]}>
-          {item.name}
-        </Text>
+  const renderIngredientItem = ({ item }) => {
+    return (
+      <View style={styles.ingredientItem}>
+        <IngredientIcon ingredient={item} size={40} />
+        <View style={styles.ingredientTextContainer}>
+          <Text
+            style={[styles.ingredientAmount, { fontFamily: "Inter_600SemiBold" }]}
+          >
+            {item.amount} {item.unit}
+          </Text>
+          <Text style={[styles.ingredientName, { fontFamily: "Inter_400Regular" }]}>
+            {item.name}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderInstructionItem = ({ item }) => (
     <View style={styles.instructionItem}>
@@ -419,8 +451,14 @@ export default function RecipeDetailScreen() {
   }
 
   const recipe = recipeData.data;
-  const carouselImages = recipe.image_url ? [recipe.image_url] : [];
-  const ingredients = recipe.ingredients || [];
+  const hasImage = recipe.image_url && recipe.image_url.trim() !== "";
+  const carouselImages = hasImage ? [recipe.image_url] : [];
+  const rawIngredients = recipe.ingredients || [];
+  
+  // Convert ingredients based on user's measurement preference
+  const measurementSystem = preferencesData?.measurementSystem || 'metric';
+  const ingredients = convertIngredients(rawIngredients, measurementSystem);
+  
   const instructions = recipe.instructions || [];
   const nutrition = recipe.nutrition || {};
 
@@ -446,18 +484,22 @@ export default function RecipeDetailScreen() {
         </Text>
 
         <TouchableOpacity
-          style={styles.navButton}
+          style={[
+            styles.favoriteToggle,
+            isFavorited && styles.favoriteToggleActive
+          ]}
           onPress={handleFavoritePress}
           accessibilityLabel={
             isFavorited ? "Remove from favorites" : "Add to favorites"
           }
-          accessibilityRole="button"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: isFavorited }}
         >
           <Heart
             size={22}
-            color="#000000"
-            fill={isFavorited ? "#000000" : "none"}
-            strokeWidth={1}
+            color={isFavorited ? "#FFFFFF" : "#000000"}
+            fill={isFavorited ? "#FFFFFF" : "none"}
+            strokeWidth={isFavorited ? 0 : 2}
           />
         </TouchableOpacity>
       </View>
@@ -470,23 +512,29 @@ export default function RecipeDetailScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Carousel */}
-        {carouselImages.length > 0 && (
-          <View style={styles.carouselContainer}>
-            <FlatList
-              ref={flatListRef}
-              data={carouselImages}
-              renderItem={renderCarouselItem}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              contentContainerStyle={styles.carouselContent}
-            />
-            {carouselImages.length > 1 && renderDotIndicator(carouselImages)}
-          </View>
-        )}
+        {/* Hero Carousel or Placeholder */}
+        <View style={styles.carouselContainer}>
+          {carouselImages.length > 0 ? (
+            <>
+              <FlatList
+                ref={flatListRef}
+                data={carouselImages}
+                renderItem={renderCarouselItem}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.carouselContent}
+              />
+              {carouselImages.length > 1 && renderDotIndicator(carouselImages)}
+            </>
+          ) : (
+            <View style={styles.placeholderContainer}>
+              <ChefHat size={60} color="#FF9F1C" />
+            </View>
+          )}
+        </View>
 
         {/* Recipe Card */}
         <View style={styles.recipeCard}>
@@ -734,6 +782,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  favoriteToggle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F3F3",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
+  },
+  favoriteToggleActive: {
+    backgroundColor: "#FF4444",
+    borderColor: "#FF4444",
+  },
   navigationTitle: {
     fontSize: 19,
     color: "#000000",
@@ -747,6 +809,7 @@ const styles = StyleSheet.create({
   },
   carouselContainer: {
     marginBottom: 12,
+    minHeight: (screenWidth - 32) * 0.67,
   },
   carouselContent: {
     paddingHorizontal: 0,
@@ -758,6 +821,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: (screenWidth - 32) * 0.67,
     borderRadius: 10,
+  },
+  placeholderContainer: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
   dotContainer: {
     flexDirection: "row",
@@ -872,11 +943,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
     gap: 12,
-  },
-  ingredientEmoji: {
-    fontSize: 28,
-    width: 40,
-    textAlign: "center",
   },
   ingredientTextContainer: {
     flex: 1,

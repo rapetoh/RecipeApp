@@ -179,6 +179,7 @@ export async function POST(request) {
       instructions,
       image_url,
       tags,
+      collectionIds, // Array of collection IDs to add recipe to
     } = body;
 
     // Validation
@@ -232,6 +233,56 @@ export async function POST(request) {
         ${userId}::uuid
       ) RETURNING *
     `;
+
+    const recipeId = result[0].id;
+
+    // Add recipe to collections
+    const collectionsToAdd = Array.isArray(collectionIds) ? collectionIds : [];
+    
+    // Always add to "My Creations" system collection
+    const myCreationsCollection = await sql`
+      SELECT id FROM recipe_collections
+      WHERE user_id = ${userId}::uuid
+      AND system_type = 'my_creations'
+      LIMIT 1
+    `;
+    
+    if (myCreationsCollection.length > 0) {
+      const myCreationsId = myCreationsCollection[0].id;
+      // Add if not already in the list
+      if (!collectionsToAdd.includes(myCreationsId)) {
+        collectionsToAdd.push(myCreationsId);
+      }
+    }
+
+    // Add recipe to all selected collections
+    for (const collectionId of collectionsToAdd) {
+      try {
+        // Verify collection belongs to user
+        const collection = await sql`
+          SELECT id FROM recipe_collections
+          WHERE id = ${collectionId} AND user_id = ${userId}::uuid
+        `;
+        
+        if (collection.length > 0) {
+          await sql`
+            INSERT INTO collection_recipes (collection_id, recipe_id)
+            VALUES (${collectionId}, ${recipeId})
+            ON CONFLICT (collection_id, recipe_id) DO NOTHING
+          `;
+          
+          // Update recipe count
+          await sql`
+            UPDATE recipe_collections
+            SET recipe_count = (SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${collectionId})
+            WHERE id = ${collectionId}
+          `;
+        }
+      } catch (error) {
+        console.error(`Error adding recipe to collection ${collectionId}:`, error);
+        // Continue with other collections even if one fails
+      }
+    }
 
     return Response.json(
       {

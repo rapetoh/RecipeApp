@@ -13,6 +13,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -37,15 +38,17 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Folder,
+  X,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useUpload } from "@/utils/useUpload";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
 
 export default function FoodRecognitionScreen() {
   const insets = useSafeAreaInsets();
@@ -62,6 +65,8 @@ export default function FoodRecognitionScreen() {
   const [savedRecipeId, setSavedRecipeId] = useState(null); // Track if recipe was saved
   const [showRecipePreview, setShowRecipePreview] = useState(false); // Toggle recipe preview
   const [isSavingRecipe, setIsSavingRecipe] = useState(false); // Track saving state
+  const [showCollectionModal, setShowCollectionModal] = useState(false); // Collection selection modal
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState([]); // Selected collections for Keep Recipe
 
   // Animation refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -332,6 +337,39 @@ export default function FoodRecognitionScreen() {
     router.push(`/recipe-detail?id=${recipeId}`);
   };
 
+  // Fetch collections for Keep Recipe modal
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections", auth?.user?.id],
+    queryFn: async () => {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/collections?userId=${auth?.user?.id}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch collections");
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    enabled: !!auth?.user?.id && showCollectionModal,
+  });
+
+  const allCollections = collectionsData?.data || [];
+  const customCollections = allCollections.filter(c => c.collection_type === 'custom');
+  const systemCollections = allCollections.filter(c => c.collection_type === 'system');
+  
+  // If no custom collections exist, show system collections but gray them out
+  const collections = customCollections.length > 0 
+    ? customCollections 
+    : systemCollections;
+  const shouldDisableSystemCollections = customCollections.length === 0 && systemCollections.length > 0;
+
   // Save generated recipe mutation
   const saveRecipeMutation = useMutation({
     mutationFn: async (recipeData) => {
@@ -346,6 +384,7 @@ export default function FoodRecognitionScreen() {
         body: JSON.stringify({
           ...recipeData,
           recognitionId: recognitionResult?.recognitionId,
+          collectionIds: selectedCollectionIds, // Include selected collections
         }),
       });
 
@@ -360,12 +399,14 @@ export default function FoodRecognitionScreen() {
       if (data.success && data.data) {
         setSavedRecipeId(data.data.id);
         setIsSavingRecipe(false);
+        setShowCollectionModal(false);
+        setSelectedCollectionIds([]);
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
         Alert.alert(
           "Recipe Kept!",
-          "This recipe has been added to your collection.",
+          "This recipe has been added to your collections.",
           [{ text: "OK" }]
         );
       }
@@ -379,12 +420,32 @@ export default function FoodRecognitionScreen() {
   const handleSaveRecipe = () => {
     if (!recognitionResult?.generatedRecipe) return;
     
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    // Show collection selection modal
+    setShowCollectionModal(true);
+  };
+
+  const handleConfirmKeepRecipe = () => {
+    if (!recognitionResult?.generatedRecipe) return;
+    
     setIsSavingRecipe(true);
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     
     const recipe = recognitionResult.generatedRecipe;
+    
+    // Get image URL - prioritize from recipe, then from selectedImage if available
+    let imageUrl = recipe.image_url || recipe._imageUrl;
+    if (!imageUrl && selectedImage?.uri) {
+      // Fallback to selectedImage URI if recipe doesn't have image_url
+      // This can happen if using an existing similar recipe
+      imageUrl = selectedImage.uri;
+    }
+    
     saveRecipeMutation.mutate({
       name: recipe.name,
       description: recipe.description,
@@ -396,10 +457,21 @@ export default function FoodRecognitionScreen() {
       servings: recipe.servings,
       ingredients: recipe.ingredients,
       instructions: recipe.instructions,
-      image_url: recipe.image_url || recipe._imageUrl,
+      image_url: imageUrl, // Use the resolved image URL
       nutrition: recipe.nutrition,
       tags: recipe.tags || ["ai-generated", "image-recognized"],
     });
+  };
+
+  const toggleCollectionSelection = (collectionId) => {
+    if (selectedCollectionIds.includes(collectionId)) {
+      setSelectedCollectionIds(selectedCollectionIds.filter(id => id !== collectionId));
+    } else {
+      setSelectedCollectionIds([...selectedCollectionIds, collectionId]);
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   };
 
   const resetToStart = () => {
@@ -841,9 +913,7 @@ export default function FoodRecognitionScreen() {
                           const ingredientText = typeof ing === 'string' ? ing : `${ing.amount || ''} ${ing.unit || ''} ${ingredientName}`.trim();
                           return (
                             <View key={idx} style={styles.ingredientRow}>
-                              <Text style={styles.ingredientEmoji}>
-                                {getIngredientIcon(ingredientName)}
-                              </Text>
+                              <IngredientIcon ingredient={ingredientName} size={28} />
                               <Text
                                 style={[
                                   styles.previewItem,
@@ -926,7 +996,7 @@ export default function FoodRecognitionScreen() {
                             { fontFamily: "Inter_600SemiBold", marginLeft: 8 },
                           ]}
                         >
-                          Keep Recipe
+                          Keep Recipe (Generated)
                         </Text>
                       </>
                     )}
@@ -1006,9 +1076,233 @@ export default function FoodRecognitionScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Collection Selection Modal */}
+      <Modal
+        visible={showCollectionModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCollectionModal(false)}
+      >
+        <View style={collectionModalStyles.overlay}>
+          <View style={collectionModalStyles.modalContainer}>
+            {/* Header */}
+            <View style={collectionModalStyles.modalHeader}>
+              <Text
+                style={[
+                  collectionModalStyles.modalTitle,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Select Collections
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCollectionModal(false);
+                  setSelectedCollectionIds([]);
+                }}
+                style={collectionModalStyles.closeButton}
+              >
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Collections List */}
+            <ScrollView style={collectionModalStyles.collectionsList}>
+              {collections.length === 0 ? (
+                <View style={collectionModalStyles.emptyState}>
+                  <Text
+                    style={[
+                      collectionModalStyles.emptyText,
+                      { fontFamily: "Inter_400Regular" },
+                    ]}
+                  >
+                    No collections available. Create one in My Recipes.
+                  </Text>
+                </View>
+              ) : (
+                collections.map((collection) => {
+                  const isSelected = selectedCollectionIds.includes(collection.id);
+                  const isDisabled = shouldDisableSystemCollections && collection.collection_type === 'system';
+                  return (
+                    <TouchableOpacity
+                      key={collection.id}
+                      style={[
+                        collectionModalStyles.collectionItem,
+                        isSelected && collectionModalStyles.collectionItemSelected,
+                        isDisabled && collectionModalStyles.collectionItemDisabled,
+                      ]}
+                      onPress={() => !isDisabled && toggleCollectionSelection(collection.id)}
+                      disabled={isDisabled}
+                    >
+                      <Folder
+                        size={20}
+                        color={isSelected ? "#FFFFFF" : (isDisabled ? "#CCCCCC" : "#666666")}
+                      />
+                      <Text
+                        style={[
+                          collectionModalStyles.collectionItemText,
+                          { fontFamily: "Inter_500Medium" },
+                          isSelected && collectionModalStyles.collectionItemTextSelected,
+                          isDisabled && collectionModalStyles.collectionItemTextDisabled,
+                        ]}
+                      >
+                        {collection.name}
+                      </Text>
+                      {isSelected && <Check size={20} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {/* Actions */}
+            <View style={collectionModalStyles.modalActions}>
+              <TouchableOpacity
+                style={collectionModalStyles.cancelButton}
+                onPress={() => {
+                  setShowCollectionModal(false);
+                  setSelectedCollectionIds([]);
+                }}
+              >
+                <Text
+                  style={[
+                    collectionModalStyles.cancelButtonText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  collectionModalStyles.confirmButton,
+                  isSavingRecipe && collectionModalStyles.confirmButtonDisabled,
+                ]}
+                onPress={handleConfirmKeepRecipe}
+                disabled={isSavingRecipe}
+              >
+                {isSavingRecipe ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      collectionModalStyles.confirmButtonText,
+                      { fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
+                    Keep Recipe (Generated)
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+const collectionModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "80%",
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  modalTitle: {
+    fontSize: 20,
+    color: "#000000",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  collectionsList: {
+    maxHeight: 400,
+    padding: 20,
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#666666",
+    textAlign: "center",
+  },
+  collectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#F8F8F8",
+    marginBottom: 12,
+  },
+  collectionItemSelected: {
+    backgroundColor: "#FF9F1C",
+  },
+  collectionItemDisabled: {
+    backgroundColor: "#F5F5F5",
+    opacity: 0.6,
+  },
+  collectionItemText: {
+    fontSize: 16,
+    color: "#000000",
+    marginLeft: 12,
+    flex: 1,
+  },
+  collectionItemTextSelected: {
+    color: "#FFFFFF",
+  },
+  collectionItemTextDisabled: {
+    color: "#999999",
+  },
+  modalActions: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#000000",
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#FF9F1C",
+    alignItems: "center",
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1372,11 +1666,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 4,
-  },
-  ingredientEmoji: {
-    fontSize: 20,
-    width: 28,
-    textAlign: "center",
   },
   previewItem: {
     fontSize: 13,

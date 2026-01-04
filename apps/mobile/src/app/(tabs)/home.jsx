@@ -26,7 +26,7 @@ import {
 import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Menu, Bell, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
+import { Menu, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
 import VoiceSuggestions from "@/components/VoiceSuggestions";
 
@@ -171,20 +171,30 @@ export default function HomeScreen() {
     router.push("/(tabs)/profile");
   };
 
-  const handleNotificationPress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+  // Get time-based greeting and meal time
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
 
-    if (!isAuthenticated) {
-      Alert.alert("Sign In Required", "Please sign in to view notifications", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign In", onPress: () => signIn() },
-      ]);
-      return;
-    }
+  const getMealTime = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) return "Breakfast time";
+    if (hour >= 11 && hour < 15) return "Lunch time";
+    if (hour >= 15 && hour < 21) return "Dinner time";
+    return "Snack time";
+  };
 
-    Alert.alert("Notifications", "No new notifications");
+  const getCurrentTime = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const displayHours = hours % 12 || 12;
+    const displayMinutes = minutes.toString().padStart(2, "0");
+    return `${displayHours}:${displayMinutes} ${ampm}`;
   };
 
   const handleFoodRecognitionPress = () => {
@@ -361,23 +371,15 @@ export default function HomeScreen() {
             <Text
               style={[styles.greeting, { fontFamily: "Inter_600SemiBold" }]}
             >
-              Good Morning,
+              {getTimeBasedGreeting()}, {userName}
             </Text>
             <Text
-              style={[styles.userName, { fontFamily: "Inter_600SemiBold" }]}
+              style={[styles.timeText, { fontFamily: "Inter_400Regular" }]}
             >
-              {userName}! 👋
+              {getCurrentTime()} · {getMealTime()}
             </Text>
           </View>
         </View>
-
-        <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={handleNotificationPress}
-        >
-          <Bell size={24} color="#000000" />
-          {isAuthenticated && <View style={styles.notificationDot} />}
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -655,31 +657,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greeting: {
-    fontSize: 16,
-    color: "#666666",
-    marginBottom: 2,
-  },
-  userName: {
     fontSize: 20,
     color: "#000000",
+    marginBottom: 4,
   },
-  notificationButton: {
-    position: "relative",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F8F8F8",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  notificationDot: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#FF4444",
+  timeText: {
+    fontSize: 14,
+    color: "#666666",
   },
   scrollView: {
     flex: 1,

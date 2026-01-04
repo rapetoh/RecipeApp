@@ -20,7 +20,7 @@ import {
 import { ArrowRight, ArrowLeft, Globe, X } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
 
 const CUISINE_OPTIONS = [
   { id: "african", label: "African", emoji: "🌍" },
@@ -256,9 +256,7 @@ export default function OnboardingCuisinesScreen() {
                   ]}
                   onPress={() => handleDislikePress(ingredient)}
                 >
-                  <Text style={styles.dislikeEmoji}>
-                    {getIngredientIcon(ingredient)}
-                  </Text>
+                  <IngredientIcon ingredient={ingredient} size={24} />
                   <Text
                     style={[
                       styles.dislikeLabel,
@@ -320,9 +318,7 @@ export default function OnboardingCuisinesScreen() {
               <View style={styles.selectedDislikesGrid}>
                 {dislikedIngredients.map((ingredient, index) => (
                   <View key={index} style={styles.selectedDislikeTag}>
-                    <Text style={styles.selectedDislikeEmoji}>
-                      {getIngredientIcon(ingredient)}
-                    </Text>
+                    <IngredientIcon ingredient={ingredient} size={20} />
                     <Text
                       style={[
                         styles.selectedDislikeText,
@@ -331,14 +327,14 @@ export default function OnboardingCuisinesScreen() {
                     >
                       {ingredient}
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => removeDislikedIngredient(ingredient)}
-                      style={styles.removeButton}
-                    >
-                      <X size={14} color="#FF6B6B" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                      <TouchableOpacity
+                        onPress={() => removeDislikedIngredient(ingredient)}
+                        style={styles.removeButton}
+                      >
+                        <X size={14} color="#FF6B6B" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
               </View>
             </View>
           )}
@@ -482,9 +478,6 @@ const styles = StyleSheet.create({
     borderColor: "#FF6B6B",
     backgroundColor: "#FFF5F5",
   },
-  dislikeEmoji: {
-    fontSize: 18,
-  },
   dislikeLabel: {
     fontSize: 13,
     color: "#333333",
@@ -545,9 +538,6 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: "#FF6B6B",
-  },
-  selectedDislikeEmoji: {
-    fontSize: 16,
   },
   selectedDislikeText: {
     fontSize: 12,

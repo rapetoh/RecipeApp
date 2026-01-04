@@ -1,5 +1,4 @@
 import sql from "@/app/api/utils/sql";
-import { generateImageWithDALLE } from "@/app/api/utils/openai";
 import OpenAI from "openai";
 
 const openai = process.env.OPENAI_API_KEY
@@ -120,7 +119,8 @@ export async function POST(request) {
         SELECT 
           diet_type, allergies, dislikes, preferred_cuisines, 
           calorie_goal, experience_level, cooking_skill, cooking_schedule,
-          goals, preferred_cooking_time, people_count
+          goals, preferred_cooking_time, people_count,
+          apply_preferences_in_assistant, measurement_system
         FROM users 
         WHERE id = ${userId}::uuid
       `,
@@ -200,6 +200,10 @@ export async function POST(request) {
       tags: r.tags,
     }));
 
+    // Check if preferences should be applied
+    const applyPreferences = preferences?.apply_preferences_in_assistant !== false; // Default to true
+    const measurementSystem = preferences?.measurement_system || 'metric';
+
     // Generate recipes based on voice input + preferences
     const generatedRecipes = await generateVoiceBasedSuggestions(
       transcription,
@@ -207,7 +211,9 @@ export async function POST(request) {
       saved,
       recent,
       created,
-      dislikedRecipesList
+      dislikedRecipesList,
+      applyPreferences,
+      measurementSystem
     );
 
     if (!generatedRecipes || generatedRecipes.length === 0) {
@@ -221,13 +227,8 @@ export async function POST(request) {
     const recipesWithScores = [];
     for (const recipeData of generatedRecipes) {
       try {
-        // Generate image
-        let imageUrl = null;
-        try {
-          imageUrl = await generateImageWithDALLE(recipeData.name);
-        } catch (imgError) {
-          console.warn("Failed to generate image:", imgError);
-        }
+        // No image generation - will use placeholder in frontend
+        const imageUrl = null;
 
         // Save recipe
         const savedRecipe = await sql`
@@ -303,7 +304,9 @@ async function generateVoiceBasedSuggestions(
   savedRecipes,
   recentMeals,
   createdRecipes,
-  dislikedRecipes
+  dislikedRecipes,
+  applyPreferences = true,
+  measurementSystem = 'metric'
 ) {
   if (!openai) {
     throw new Error("OpenAI API key not configured");
@@ -336,28 +339,35 @@ async function generateVoiceBasedSuggestions(
     );
   }
 
-  // Build context
+  // Build context (only when applyPreferences is true)
   const context = [];
-  if (userPreferences?.preferred_cuisines) {
-    const cuisines = Array.isArray(userPreferences.preferred_cuisines)
-      ? userPreferences.preferred_cuisines.join(", ")
-      : userPreferences.preferred_cuisines;
-    context.push(`Preferred cuisines: ${cuisines}`);
+  if (applyPreferences) {
+    if (userPreferences?.preferred_cuisines) {
+      const cuisines = Array.isArray(userPreferences.preferred_cuisines)
+        ? userPreferences.preferred_cuisines.join(", ")
+        : userPreferences.preferred_cuisines;
+      context.push(`Preferred cuisines: ${cuisines}`);
+    }
+
+    if (userPreferences?.cooking_skill || userPreferences?.experience_level) {
+      context.push(
+        `Cooking skill: ${userPreferences.cooking_skill || userPreferences.experience_level || "beginner"}`
+      );
+    }
+
+    if (userPreferences?.preferred_cooking_time) {
+      context.push(`Preferred cooking time: ${userPreferences.preferred_cooking_time}`);
+    }
+
+    if (userPreferences?.goals && Array.isArray(userPreferences.goals) && userPreferences.goals.length > 0) {
+      context.push(`Health goals: ${userPreferences.goals.join(", ")}`);
+    }
   }
 
-  if (userPreferences?.cooking_skill || userPreferences?.experience_level) {
-    context.push(
-      `Cooking skill: ${userPreferences.cooking_skill || userPreferences.experience_level || "beginner"}`
-    );
-  }
-
-  if (userPreferences?.preferred_cooking_time) {
-    context.push(`Preferred cooking time: ${userPreferences.preferred_cooking_time}`);
-  }
-
-  if (userPreferences?.goals && Array.isArray(userPreferences.goals) && userPreferences.goals.length > 0) {
-    context.push(`Health goals: ${userPreferences.goals.join(", ")}`);
-  }
+  // Determine unit examples based on measurement system
+  const unitExamples = measurementSystem === 'imperial' 
+    ? '{"name": "ingredient", "amount": "1", "unit": "cup"}, {"name": "salt", "amount": "1", "unit": "tsp"}'
+    : '{"name": "ingredient", "amount": "250", "unit": "g"}, {"name": "salt", "amount": "5", "unit": "ml"}';
 
   const prompt = `You are an expert nutritionist and chef AI assistant. The user just said: "${vibe}"
 
@@ -366,13 +376,13 @@ Generate 3-5 personalized recipe suggestions that match their current mood and r
 CRITICAL REQUIREMENTS (MUST FOLLOW):
 ${hardConstraints.length > 0 ? hardConstraints.join("\n") : "None"}
 
-USER PREFERENCES:
-${context.length > 0 ? context.join("\n") : "No specific preferences"}
+${applyPreferences && context.length > 0 ? `USER PREFERENCES:\n${context.join("\n")}\n\n` : ''}IMPORTANT: Use ${measurementSystem === 'imperial' ? 'US Imperial units (cups, ounces, pounds, tsp, tbsp)' : 'Metric units (grams, kilograms, milliliters, liters)'} for all ingredient measurements.
 
 Based on their request "${vibe}", create recipes that:
 1. Match their current mood/needs (e.g., if they said "tired and want something quick", give quick, energizing recipes)
 2. Respect their dietary restrictions
 3. Are varied and appealing
+4. Use ${measurementSystem === 'imperial' ? 'US Imperial' : 'Metric'} measurement units
 
 Respond with ONLY a JSON object:
 {
@@ -386,7 +396,7 @@ Respond with ONLY a JSON object:
       "prep_time": 10,
       "difficulty": "easy",
       "servings": 4,
-      "ingredients": [{"name": "ingredient", "amount": "1", "unit": "cup"}],
+      "ingredients": [${unitExamples}],
       "instructions": [{"step": 1, "instruction": "Step details"}],
       "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5},
       "tags": ["quick", "healthy"],

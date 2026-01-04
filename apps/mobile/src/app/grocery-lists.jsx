@@ -11,6 +11,7 @@ import {
   BackHandler,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useFonts,
@@ -39,7 +40,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
 
 export default function GroceryListsScreen() {
   const insets = useSafeAreaInsets();
@@ -795,9 +796,17 @@ export default function GroceryListsScreen() {
                           />
                       )}
                     </View>
-                    <Text style={styles.itemEmoji}>
-                      {getIngredientIcon(itemName)}
-                    </Text>
+                    {(() => {
+                      const iconData = getIngredientIcon(itemName);
+                      return (
+                        <Image
+                          source={{ uri: iconData.imageUrl }}
+                          style={styles.itemImage}
+                          contentFit="cover"
+                          defaultSource={{ uri: iconData.fallbackUrl }}
+                        />
+                      );
+                    })()}
                     <View style={styles.itemInfo}>
                       <Text
                         style={[
@@ -1304,11 +1313,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     gap: 12,
-  },
-  itemEmoji: {
-    fontSize: 28,
-    width: 40,
-    textAlign: "center",
   },
   checkboxContainer: {
     marginRight: 12,

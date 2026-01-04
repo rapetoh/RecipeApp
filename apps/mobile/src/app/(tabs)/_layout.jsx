@@ -1,25 +1,21 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Home, Heart, BookOpen, Calendar } from "lucide-react-native";
+import { Home, Heart, BookOpen, Calendar, Menu } from "lucide-react-native";
+import CustomTabBar from "@/components/CustomTabBar";
 
 export default function TabLayout() {
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#fff",
-          borderTopWidth: 1,
-          borderColor: "#E5E7EB",
-          paddingTop: 4,
-          height: 80,
-        },
-        tabBarActiveTintColor: "#000000",
-        tabBarInactiveTintColor: "#6B6B6B",
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "500",
-          marginBottom: 4,
+          position: "absolute",
+          backgroundColor: "transparent",
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
+          height: 0, // Hide default tab bar
         },
       }}
     >
@@ -40,7 +36,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="save"
         options={{
-          title: "Saved",
+          title: "Favorite",
           tabBarIcon: ({ color, size }) => <Heart color={color} size={24} />,
         }}
       />

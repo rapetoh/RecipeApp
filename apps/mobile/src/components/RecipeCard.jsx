@@ -6,7 +6,7 @@ import {
   Inter_400Regular,
   Inter_600SemiBold,
 } from "@expo-google-fonts/inter";
-import { Heart, Clock } from "lucide-react-native";
+import { Heart, Clock, ChefHat } from "lucide-react-native";
 
 export default function RecipeCard({ recipe, cardWidth, onPress }) {
   const [fontsLoaded] = useFonts({
@@ -28,12 +28,18 @@ export default function RecipeCard({ recipe, cardWidth, onPress }) {
       onPress={handlePress}
     >
       <View style={[styles.imageContainer, { height: recipe.height || 180 }]}>
-        <Image
-          source={{ uri: recipe.image }}
-          style={styles.image}
-          contentFit="cover"
-          transition={200}
-        />
+        {recipe.image && recipe.image.trim() !== "" ? (
+          <Image
+            source={{ uri: recipe.image }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View style={styles.placeholderContainer}>
+            <ChefHat size={32} color="#FF9F1C" />
+          </View>
+        )}
 
         <TouchableOpacity style={styles.favoriteButton}>
           <Heart
@@ -100,6 +106,13 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  placeholderContainer: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F5F5F5",
+    justifyContent: "center",
+    alignItems: "center",
   },
   favoriteButton: {
     position: "absolute",

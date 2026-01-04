@@ -10,6 +10,8 @@ import {
   Animated,
   ScrollView,
   Dimensions,
+  Modal,
+  KeyboardAvoidingView,
 } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,8 +25,8 @@ import {
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
-import { Mic, X, ChefHat, Clock, Leaf, ArrowRight } from "lucide-react-native";
-import { useMutation } from "@tanstack/react-query";
+import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder } from "lucide-react-native";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
@@ -45,6 +47,11 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [results, setResults] = useState([]);
   const [vibeText, setVibeText] = useState("");
   const recordingAttemptedRef = useRef(false);
+  const [savedRecipeIds, setSavedRecipeIds] = useState(new Set()); // Track saved recipes
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
+  const [isSavingRecipe, setIsSavingRecipe] = useState(false);
 
   // Animation for waveform
   const waveformAnim = useRef(
@@ -422,9 +429,132 @@ export default function VoiceSuggestions({ visible, onClose }) {
     router.push(`/recipe-detail?id=${recipe.id}`);
   };
 
+  // Fetch collections for Keep Recipe modal
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections", auth?.user?.id],
+    queryFn: async () => {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/collections?userId=${auth?.user?.id}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch collections");
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    enabled: !!auth?.user?.id && showCollectionModal,
+  });
+
+  const allCollections = collectionsData?.data || [];
+  const customCollections = allCollections.filter(c => c.collection_type === 'custom');
+  const systemCollections = allCollections.filter(c => c.collection_type === 'system');
+  
+  // If no custom collections exist, show system collections but gray them out
+  const collections = customCollections.length > 0 
+    ? customCollections 
+    : systemCollections;
+  const shouldDisableSystemCollections = customCollections.length === 0 && systemCollections.length > 0;
+
+  const toggleCollectionSelection = (collectionId) => {
+    if (selectedCollectionIds.includes(collectionId)) {
+      setSelectedCollectionIds(selectedCollectionIds.filter(id => id !== collectionId));
+    } else {
+      setSelectedCollectionIds([...selectedCollectionIds, collectionId]);
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const handleKeepRecipe = (recipe, e) => {
+    e?.stopPropagation(); // Prevent triggering recipe card press
+    if (!auth?.user?.id) {
+      Alert.alert("Sign In Required", "Please sign in to keep recipes", [
+        { text: "Cancel", style: "cancel" },
+      ]);
+      return;
+    }
+    setSelectedRecipe(recipe);
+    setShowCollectionModal(true);
+  };
+
+  const handleConfirmKeepRecipe = async () => {
+    if (!selectedRecipe) return;
+    
+    setIsSavingRecipe(true);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    try {
+      const apiUrl = getApiUrl();
+      
+      // Add to saved_recipes and Generated collection using save-generated endpoint
+      // Even though recipe exists, this ensures proper setup
+      const response = await fetch(`${apiUrl}/api/recipes/save-generated`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(auth?.jwt && { "Authorization": `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: selectedRecipe.name,
+          description: selectedRecipe.description,
+          category: selectedRecipe.category,
+          cuisine: selectedRecipe.cuisine,
+          cooking_time: selectedRecipe.cooking_time,
+          prep_time: selectedRecipe.prep_time,
+          difficulty: selectedRecipe.difficulty,
+          servings: selectedRecipe.servings,
+          ingredients: selectedRecipe.ingredients,
+          instructions: selectedRecipe.instructions,
+          image_url: selectedRecipe.image_url,
+          nutrition: selectedRecipe.nutrition,
+          tags: selectedRecipe.tags || ["ai-generated", "voice-suggested"],
+          collectionIds: selectedCollectionIds,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Failed to save recipe");
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSavedRecipeIds(new Set([...savedRecipeIds, selectedRecipe.id]));
+        setIsSavingRecipe(false);
+        setShowCollectionModal(false);
+        setSelectedRecipe(null);
+        setSelectedCollectionIds([]);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        Alert.alert(
+          "Recipe Kept!",
+          "This recipe has been added to your collections.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      setIsSavingRecipe(false);
+      Alert.alert("Error", error.message || "Failed to save recipe");
+    }
+  };
+
   if (!fontsLoaded) return null;
 
   return (
+    <>
       <BottomSheet
         ref={bottomSheetRef}
         index={sheetIndex}
@@ -648,82 +778,126 @@ export default function VoiceSuggestions({ visible, onClose }) {
               Based on '{vibeText}'
             </Text>
 
-            {results.map((recipe) => (
-              <TouchableOpacity
-                key={recipe.id}
-                style={styles.recipeCard}
-                onPress={() => handleRecipePress(recipe)}
-              >
-                <Image
-                  source={{ uri: recipe.image_url || "" }}
-                  style={styles.recipeImage}
-                  contentFit="cover"
-                />
-                <View style={styles.recipeContent}>
-                  <View style={styles.recipeHeader}>
-                    <View style={styles.matchBadge}>
+            {results.map((recipe) => {
+              const isSaved = savedRecipeIds.has(recipe.id);
+              return (
+                <View key={recipe.id} style={styles.recipeCardWrapper}>
+                  <TouchableOpacity
+                    style={styles.recipeCard}
+                    onPress={() => handleRecipePress(recipe)}
+                  >
+                    {recipe.image_url && recipe.image_url.trim() !== "" ? (
+                      <Image
+                        source={{ uri: recipe.image_url }}
+                        style={styles.recipeImage}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.recipeImage, styles.recipeImagePlaceholder]}>
+                        <ChefHat size={28} color="#FF9F1C" />
+                      </View>
+                    )}
+                    <View style={styles.recipeContent}>
+                      <View style={styles.recipeHeader}>
+                        <View style={styles.matchBadge}>
+                          <Text
+                            style={[
+                              styles.matchText,
+                              { fontFamily: "Inter_600SemiBold" },
+                            ]}
+                          >
+                            {recipe.matchPercentage || 95}% Match
+                          </Text>
+                        </View>
+                        <ArrowRight size={20} color="#666666" />
+                      </View>
                       <Text
                         style={[
-                          styles.matchText,
+                          styles.recipeName,
                           { fontFamily: "Inter_600SemiBold" },
                         ]}
                       >
-                        {recipe.matchPercentage || 95}% Match
+                        {recipe.name}
                       </Text>
+                      <View style={styles.recipeMeta}>
+                        <View style={styles.metaItem}>
+                          <Clock size={14} color="#666666" />
+                          <Text
+                            style={[
+                              styles.metaText,
+                              { fontFamily: "Inter_400Regular" },
+                            ]}
+                          >
+                            {recipe.cooking_time || 30} min
+                          </Text>
+                        </View>
+                        <View style={styles.metaItem}>
+                          {recipe.dietary_info ? (
+                            <>
+                              <Leaf size={14} color="#666666" />
+                              <Text
+                                style={[
+                                  styles.metaText,
+                                  { fontFamily: "Inter_400Regular" },
+                                ]}
+                              >
+                                {recipe.dietary_info}
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <ChefHat size={14} color="#666666" />
+                              <Text
+                                style={[
+                                  styles.metaText,
+                                  { fontFamily: "Inter_400Regular" },
+                                ]}
+                              >
+                                {recipe.difficulty || "Easy"}
+                              </Text>
+                            </>
+                          )}
+                        </View>
+                      </View>
                     </View>
-                    <ArrowRight size={20} color="#666666" />
-                  </View>
-                  <Text
-                    style={[
-                      styles.recipeName,
-                      { fontFamily: "Inter_600SemiBold" },
-                    ]}
-                  >
-                    {recipe.name}
-                  </Text>
-                  <View style={styles.recipeMeta}>
-                    <View style={styles.metaItem}>
-                      <Clock size={14} color="#666666" />
+                  </TouchableOpacity>
+                  
+                  {/* Keep Recipe Button */}
+                  {!isSaved ? (
+                    <TouchableOpacity
+                      style={styles.keepRecipeButton}
+                      onPress={(e) => handleKeepRecipe(recipe, e)}
+                    >
+                      <Save size={16} color="#FF9F1C" />
                       <Text
                         style={[
-                          styles.metaText,
-                          { fontFamily: "Inter_400Regular" },
+                          styles.keepRecipeButtonText,
+                          { fontFamily: "Inter_600SemiBold" },
                         ]}
                       >
-                        {recipe.cooking_time || 30} min
+                        Keep Recipe (Generated)
                       </Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      {recipe.dietary_info ? (
-                        <>
-                          <Leaf size={14} color="#666666" />
-                          <Text
-                            style={[
-                              styles.metaText,
-                              { fontFamily: "Inter_400Regular" },
-                            ]}
-                          >
-                            {recipe.dietary_info}
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <ChefHat size={14} color="#666666" />
-                          <Text
-                            style={[
-                              styles.metaText,
-                              { fontFamily: "Inter_400Regular" },
-                            ]}
-                          >
-                            {recipe.difficulty || "Easy"}
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  </View>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.keepRecipeButton, styles.keepRecipeButtonSaved]}
+                      onPress={() => handleRecipePress(recipe)}
+                    >
+                      <Check size={16} color="#FFFFFF" />
+                      <Text
+                        style={[
+                          styles.keepRecipeButtonText,
+                          styles.keepRecipeButtonTextSaved,
+                          { fontFamily: "Inter_600SemiBold" },
+                        ]}
+                      >
+                        Saved
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              </TouchableOpacity>
-            ))}
+              );
+            })}
 
             <View style={styles.resultsActions}>
               <TouchableOpacity
@@ -760,6 +934,135 @@ export default function VoiceSuggestions({ visible, onClose }) {
         </View>
       </BlurView>
     </BottomSheet>
+
+    {/* Collection Selection Modal */}
+    <Modal
+      visible={showCollectionModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCollectionModal(false)}
+    >
+      <KeyboardAvoidingView
+        style={styles.modalContainer}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Select Collections
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCollectionModal(false);
+                  setSelectedCollectionIds([]);
+                }}
+                style={styles.modalCloseButton}
+              >
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Collections List */}
+            <ScrollView style={styles.modalCollectionsList}>
+              {collections.length === 0 ? (
+                <View style={styles.modalEmptyState}>
+                  <Text
+                    style={[
+                      styles.modalEmptyText,
+                      { fontFamily: "Inter_400Regular" },
+                    ]}
+                  >
+                    No collections available. Create one in My Recipes.
+                  </Text>
+                </View>
+              ) : (
+                collections.map((collection) => {
+                  const isSelected = selectedCollectionIds.includes(collection.id);
+                  const isDisabled = shouldDisableSystemCollections && collection.collection_type === 'system';
+                  return (
+                    <TouchableOpacity
+                      key={collection.id}
+                      style={[
+                        styles.modalCollectionItem,
+                        isSelected && styles.modalCollectionItemSelected,
+                        isDisabled && styles.modalCollectionItemDisabled,
+                      ]}
+                      onPress={() => !isDisabled && toggleCollectionSelection(collection.id)}
+                      disabled={isDisabled}
+                    >
+                      <Folder
+                        size={20}
+                        color={isSelected ? "#FFFFFF" : (isDisabled ? "#CCCCCC" : "#666666")}
+                      />
+                      <Text
+                        style={[
+                          styles.modalCollectionItemText,
+                          { fontFamily: "Inter_500Medium" },
+                          isSelected && styles.modalCollectionItemTextSelected,
+                          isDisabled && styles.modalCollectionItemTextDisabled,
+                        ]}
+                      >
+                        {collection.name}
+                      </Text>
+                      {isSelected && <Check size={20} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {/* Actions */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowCollectionModal(false);
+                  setSelectedCollectionIds([]);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.modalCancelButtonText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalConfirmButton,
+                  isSavingRecipe && styles.modalConfirmButtonDisabled,
+                ]}
+                onPress={handleConfirmKeepRecipe}
+                disabled={isSavingRecipe}
+              >
+                {isSavingRecipe ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.modalConfirmButtonText,
+                      { fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
+                    Keep Recipe (Generated)
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+    </>
   );
 }
 
@@ -941,22 +1244,53 @@ const styles = StyleSheet.create({
     color: "#666666",
     marginBottom: 24,
   },
+  recipeCardWrapper: {
+    marginBottom: 16,
+  },
   recipeCard: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    marginBottom: 16,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginBottom: 8,
+  },
+  keepRecipeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#FFF4E6",
+    borderWidth: 1,
+    borderColor: "#FF9F1C",
+  },
+  keepRecipeButtonSaved: {
+    backgroundColor: "#FF9F1C",
+    borderColor: "#FF9F1C",
+  },
+  keepRecipeButtonText: {
+    fontSize: 14,
+    color: "#FF9F1C",
+    marginLeft: 6,
+  },
+  keepRecipeButtonTextSaved: {
+    color: "#FFFFFF",
   },
   recipeImage: {
     width: 100,
     height: 100,
     backgroundColor: "#F8F9FA",
+  },
+  recipeImagePlaceholder: {
+    backgroundColor: "#F5F5F5",
+    justifyContent: "center",
+    alignItems: "center",
   },
   recipeContent: {
     flex: 1,
@@ -1025,6 +1359,109 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   viewPlannerText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "80%",
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  modalTitle: {
+    fontSize: 20,
+    color: "#000000",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalCollectionsList: {
+    maxHeight: 400,
+    padding: 20,
+  },
+  modalEmptyState: {
+    padding: 40,
+    alignItems: "center",
+  },
+  modalEmptyText: {
+    fontSize: 14,
+    color: "#666666",
+    textAlign: "center",
+  },
+  modalCollectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#F8F8F8",
+    marginBottom: 12,
+  },
+  modalCollectionItemSelected: {
+    backgroundColor: "#FF9F1C",
+  },
+  modalCollectionItemDisabled: {
+    backgroundColor: "#F5F5F5",
+    opacity: 0.6,
+  },
+  modalCollectionItemText: {
+    fontSize: 16,
+    color: "#000000",
+    marginLeft: 12,
+    flex: 1,
+  },
+  modalCollectionItemTextSelected: {
+    color: "#FFFFFF",
+  },
+  modalCollectionItemTextDisabled: {
+    color: "#999999",
+  },
+  modalActions: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+  },
+  modalCancelButtonText: {
+    fontSize: 16,
+    color: "#000000",
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#FF9F1C",
+    alignItems: "center",
+  },
+  modalConfirmButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalConfirmButtonText: {
     fontSize: 16,
     color: "#FFFFFF",
   },

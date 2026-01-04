@@ -9,8 +9,15 @@ import { authHandler, initAuthConfig, verifyAuth } from '@hono/auth-js';
 import { getAuthConfig } from './auth';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-// server.ts is in src/, so API is at src/app/api
-const API_DIR = join(__dirname, 'app/api');
+// Fix: API routes need to be found correctly in both dev and production
+// In production build, __dirname is build/server/, routes are at build/server/app/api
+// In development, __dirname is src/, routes are at src/app/api
+const isProduction = process.env.NODE_ENV === 'production';
+let API_DIR = join(__dirname, 'app', 'api');
+
+console.log('🔍 __dirname:', __dirname);
+console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
+console.log('🔍 Initial API_DIR:', API_DIR);
 
 const app = new Hono();
 const api = new Hono(); // Separate Hono instance for API routes
@@ -162,24 +169,82 @@ async function findRouteFiles(dir: string): Promise<string[]> {
 
 // Register all API routes
 async function registerRoutes() {
-  const routeFiles = await findRouteFiles(API_DIR).catch(() => []);
+  console.log('🔍 Starting route registration...');
+  console.log('🔍 Looking in:', API_DIR);
+  
+  // Check if directory exists, try alternatives if not
+  let apiDirToUse: string = API_DIR;
+  try {
+    const dirStat = await stat(API_DIR);
+    if (!dirStat.isDirectory()) {
+      console.error('❌ API_DIR exists but is not a directory:', API_DIR);
+      // Will try alternatives below
+    } else {
+      console.log('✅ API_DIR exists and is a directory');
+    }
+  } catch (error) {
+    console.error('❌ API_DIR does not exist:', API_DIR);
+    console.error('Error details:', error);
+    
+    // Try alternative paths
+    const altPaths = [
+      join(process.cwd(), 'src', 'app', 'api'),
+      join(process.cwd(), 'build', 'server', 'app', 'api'),
+      join(__dirname, '..', '..', 'src', 'app', 'api'),
+      join(__dirname, '..', 'app', 'api'),
+    ];
+    
+    let found = false;
+    for (const altPath of altPaths) {
+      try {
+        console.log(`🔍 Trying alternative path: ${altPath}`);
+        const altStat = await stat(altPath);
+        if (altStat.isDirectory()) {
+          console.log(`✅ Found alternative path, using: ${altPath}`);
+          apiDirToUse = altPath;
+          found = true;
+          break;
+        }
+      } catch (e) {
+        // Continue to next alternative
+      }
+    }
+    
+    if (!found) {
+      console.error('❌ Could not find API directory in any expected location');
+      return;
+    }
+  }
+
+  const routeFiles = await findRouteFiles(apiDirToUse).catch((err) => {
+    console.error('❌ Error finding route files:', err);
+    return [];
+  });
+
+  console.log(`🔍 Found ${routeFiles.length} route files`);
+  if (routeFiles.length > 0) {
+    console.log('Route files:');
+    routeFiles.forEach(file => console.log('  -', file));
+  }
 
   // Sort routes by length (longest first) to handle nested routes correctly
   routeFiles.sort((a, b) => b.length - a.length);
 
+  let registeredCount = 0;
   for (const routeFile of routeFiles) {
     try {
       // Skip signin/signup routes - they're registered directly on main app
-      const honoPath = getHonoPath(routeFile, API_DIR);
+      const honoPath = getHonoPath(routeFile, apiDirToUse);
       if (honoPath === '/auth/signin' || honoPath === '/auth/signup') {
         console.log(`⏭️  Skipping ${honoPath} - registered directly on main app`);
         continue;
       }
 
       // Use file:// URL for dynamic imports in SSR (standard Node.js approach)
-      // This works reliably in Vite's SSR context
       const fileUrl = pathToFileURL(routeFile).href;
       const importPath = `${fileUrl}?update=${Date.now()}`;
+      
+      console.log(`🔍 Loading route: ${honoPath} from ${routeFile}`);
       const route = await import(/* @vite-ignore */ importPath);
 
       const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
@@ -211,20 +276,25 @@ async function registerRoutes() {
               break;
           }
           
-          console.log(`Registered ${method} /api${honoPath}`);
+          console.log(`✅ Registered ${method} /api${honoPath}`);
+          registeredCount++;
         }
       }
     } catch (error) {
-      console.error(`Error registering route ${routeFile}:`, error);
+      console.error(`❌ Error registering route ${routeFile}:`, error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
     }
   }
+  
+  console.log(`✅ Successfully registered ${registeredCount} route handlers`);
 }
 
 // Register routes before creating server
-console.log('🔍 Starting route registration...');
-console.log('📁 API_DIR:', API_DIR);
 await registerRoutes();
-console.log(`✅ Registered ${api.routes.length} total Hono routes`);
+console.log(`✅ Total Hono routes registered: ${api.routes.length}`);
 
 // CRITICAL: Mount API routes FIRST, before React Router
 // This ensures /api/* requests are handled by Hono, not React Router

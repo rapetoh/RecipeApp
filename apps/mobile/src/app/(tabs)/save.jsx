@@ -46,14 +46,14 @@ export default function SavedRecipesScreen() {
     return () => clearTimeout(timer);
   }, [searchText]);
 
-  // Fetch saved recipes with proper error handling
+  // Fetch favorited recipes with proper error handling
   const {
-    data: savedRecipesData,
+    data: favoritedRecipesData,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ["saved-recipes", auth?.user?.id, debouncedSearch],
+    queryKey: ["recipe-favorites", auth?.user?.id, debouncedSearch],
     queryFn: async () => {
       if (!auth?.user?.id) {
         throw new Error("User not authenticated");
@@ -61,20 +61,20 @@ export default function SavedRecipesScreen() {
 
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
-      const response = await fetch(`${apiUrl}/api/saved-recipes?userId=${auth.user.id}${searchParam}`);
+      const response = await fetch(`${apiUrl}/api/recipe-favorites?userId=${auth.user.id}${searchParam}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.error ||
-            `HTTP ${response.status}: Failed to fetch saved recipes`,
+            `HTTP ${response.status}: Failed to fetch favorited recipes`,
         );
       }
 
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Failed to fetch saved recipes");
+        throw new Error(data.error || "Failed to fetch favorited recipes");
       }
 
       return data;
@@ -109,7 +109,7 @@ export default function SavedRecipesScreen() {
     return null;
   }
 
-  const savedRecipes = savedRecipesData?.data || [];
+  const favoritedRecipes = favoritedRecipesData?.data || [];
 
   const renderRecipeItem = ({ item: recipe }) => {
     return (
@@ -167,9 +167,9 @@ export default function SavedRecipesScreen() {
           </View>
 
           <Text style={[styles.savedDate, { fontFamily: "Inter_400Regular" }]}>
-            Saved{" "}
+            Favorited{" "}
             {new Date(
-              recipe.saved_at || recipe.created_at,
+              recipe.favorited_at || recipe.created_at,
             ).toLocaleDateString()}
           </Text>
         </View>
@@ -184,7 +184,7 @@ export default function SavedRecipesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { fontFamily: "Inter_600SemiBold" }]}>
-          Saved Recipes
+          Favorite Recipes
         </Text>
       </View>
 
@@ -195,7 +195,7 @@ export default function SavedRecipesScreen() {
             <Search size={20} color="#999999" style={{ marginRight: 12 }} />
             <TextInput
               style={[styles.searchInput, { fontFamily: "Inter_400Regular" }]}
-              placeholder="Search saved recipes..."
+              placeholder="Search favorite recipes..."
               placeholderTextColor="#999999"
               value={searchText}
               onChangeText={setSearchText}
@@ -212,12 +212,12 @@ export default function SavedRecipesScreen() {
             <Text
               style={[styles.signInTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              Save Your Favorite Recipes
+              Favorite Your Recipes
             </Text>
             <Text
               style={[styles.signInText, { fontFamily: "Inter_400Regular" }]}
             >
-              Sign in to save recipes and access them anytime, anywhere
+              Sign in to favorite recipes and access them anytime, anywhere
             </Text>
             <TouchableOpacity
               style={styles.signInButton}
@@ -238,7 +238,7 @@ export default function SavedRecipesScreen() {
             <Text
               style={[styles.errorTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              Unable to Load Saved Recipes
+              Unable to Load Favorite Recipes
             </Text>
             <Text
               style={[styles.errorText, { fontFamily: "Inter_400Regular" }]}
@@ -262,22 +262,21 @@ export default function SavedRecipesScreen() {
             <Text
               style={[styles.loadingText, { fontFamily: "Inter_400Regular" }]}
             >
-              Loading saved recipes...
+              Loading favorite recipes...
             </Text>
           </View>
-        ) : !savedRecipesData?.data || savedRecipesData.data.length === 0 ? (
+        ) : !favoritedRecipesData?.data || favoritedRecipesData.data.length === 0 ? (
           <View style={styles.emptyState}>
             <ChefHat size={48} color="#999999" />
             <Text
               style={[styles.emptyTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              No Saved Recipes Yet
+              No Favorite Recipes Yet
             </Text>
             <Text
               style={[styles.emptyText, { fontFamily: "Inter_400Regular" }]}
             >
-              Start exploring recipes and tap the heart icon to save your
-              favorites
+              Start exploring recipes and tap the heart icon to favorite them
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
@@ -293,20 +292,20 @@ export default function SavedRecipesScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : savedRecipes.length === 0 ? (
+        ) : favoritedRecipes.length === 0 ? (
           <View style={styles.emptyState}>
             <Search size={48} color="#999999" />
             <Text
               style={[styles.emptyTitle, { fontFamily: "Inter_600SemiBold" }]}
             >
-              {debouncedSearch ? "No Results Found" : "No Saved Recipes"}
+              {debouncedSearch ? "No Results Found" : "No Favorite Recipes"}
             </Text>
             <Text
               style={[styles.emptyText, { fontFamily: "Inter_400Regular" }]}
             >
               {debouncedSearch 
-                ? `No saved recipes match your search "${debouncedSearch}"`
-                : "Save recipes to see them here"
+                ? `No favorite recipes match your search "${debouncedSearch}"`
+                : "Favorite recipes to see them here"
               }
             </Text>
           </View>
@@ -316,16 +315,16 @@ export default function SavedRecipesScreen() {
               <Text
                 style={[styles.statsText, { fontFamily: "Inter_500Medium" }]}
               >
-                {savedRecipes.length} saved recipe
-                {savedRecipes.length !== 1 ? "s" : ""}
+                {favoritedRecipes.length} favorite recipe
+                {favoritedRecipes.length !== 1 ? "s" : ""}
                 {debouncedSearch && ` (filtered)`}
               </Text>
             </View>
 
             <FlatList
-              data={savedRecipes}
+              data={favoritedRecipes}
               renderItem={renderRecipeItem}
-              keyExtractor={(item, index) => `saved-recipe-${item.id}-${index}`}
+              keyExtractor={(item, index) => `favorite-recipe-${item.id}-${index}`}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
               onRefresh={refetch}

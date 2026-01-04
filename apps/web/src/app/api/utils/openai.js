@@ -77,8 +77,9 @@ Rules:
  * @param {object} analysis - Analysis object from image recognition (optional)
  * @param {object} preferences - User preferences object (optional)
  * @param {boolean} applyPreferences - Whether to apply soft preferences (default: true)
+ * @param {string} measurementSystem - Measurement system to use: 'metric' or 'imperial' (default: 'metric')
  */
-export async function generateRecipeWithGPT(dishName, analysis = null, preferences = null, applyPreferences = true) {
+export async function generateRecipeWithGPT(dishName, analysis = null, preferences = null, applyPreferences = true, measurementSystem = 'metric') {
   if (!openai) {
     throw new Error('OpenAI API key not configured');
   }
@@ -120,6 +121,11 @@ export async function generateRecipeWithGPT(dishName, analysis = null, preferenc
       }
     }
 
+    // Determine unit examples based on measurement system
+    const unitExamples = measurementSystem === 'imperial' 
+      ? '{"name": "ingredient name", "amount": "1", "unit": "cup"}, {"name": "salt", "amount": "1", "unit": "tsp"}'
+      : '{"name": "ingredient name", "amount": "250", "unit": "g"}, {"name": "salt", "amount": "5", "unit": "ml"}';
+
     // Build the prompt
     let prompt = `Create a detailed recipe for "${dishName}".`;
     
@@ -132,14 +138,15 @@ export async function generateRecipeWithGPT(dishName, analysis = null, preferenc
       prompt += `\n\nIMPORTANT: If these preferences don't make sense for "${dishName}" (e.g., asking for "chocolate cake" but preferring "African food"), ignore the irrelevant preferences and create an authentic version of the dish. Only apply preferences that enhance the dish without changing its core identity.`;
     }
     
-    prompt += `\n\nRespond with ONLY a JSON object:
+    prompt += `\n\nIMPORTANT: Use ${measurementSystem === 'imperial' ? 'US Imperial units (cups, ounces, pounds, tsp, tbsp)' : 'Metric units (grams, kilograms, milliliters, liters)'} for all ingredient measurements.
+
+Respond with ONLY a JSON object:
 
 {
   "name": "Recipe Name",
   "description": "Appetizing 2-sentence description",
   "ingredients": [
-    {"name": "ingredient name", "amount": "1", "unit": "cup"},
-    {"name": "salt", "amount": "1", "unit": "tsp"}
+    ${unitExamples}
   ],
   "instructions": [
     {"step": 1, "instruction": "Detailed first step"},

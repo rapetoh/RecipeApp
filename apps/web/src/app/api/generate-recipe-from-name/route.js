@@ -1,5 +1,5 @@
 import sql from "@/app/api/utils/sql";
-import { generateRecipeWithGPT, generateImageWithDALLE } from "@/app/api/utils/openai";
+import { generateRecipeWithGPT } from "@/app/api/utils/openai";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {
@@ -28,7 +28,8 @@ async function getUserPreferences(userId) {
             cooking_skill,
             preferred_cooking_time,
             people_count,
-            apply_preferences_in_assistant
+            apply_preferences_in_assistant,
+            measurement_system
           FROM users
           WHERE id = ${userId}::uuid
         `
@@ -41,7 +42,8 @@ async function getUserPreferences(userId) {
             goals,
             cooking_skill,
             preferred_cooking_time,
-            people_count
+            people_count,
+            measurement_system
           FROM users
           WHERE id = ${userId}::uuid
         `;
@@ -63,6 +65,7 @@ async function getUserPreferences(userId) {
       applyPreferencesInAssistant: hasApplyPreferencesColumn 
         ? (prefs.apply_preferences_in_assistant !== false) 
         : true, // Default to true if column doesn't exist
+      measurementSystem: prefs.measurement_system || "metric",
     };
   } catch (error) {
     console.error("Error fetching user preferences:", error);
@@ -124,6 +127,7 @@ export async function POST(request) {
     // Fetch user preferences if userId is provided
     const userPreferences = await getUserPreferences(userId);
     const applyPreferences = userPreferences?.applyPreferencesInAssistant !== false; // Default to true
+    const measurementSystem = userPreferences?.measurementSystem || "metric";
 
     let recipeJson;
     try {
@@ -131,7 +135,8 @@ export async function POST(request) {
         trimmedDishName, 
         analysis,
         userPreferences,
-        applyPreferences
+        applyPreferences,
+        measurementSystem
       );
       
       // Validate that we got a meaningful recipe
@@ -149,15 +154,8 @@ export async function POST(request) {
       );
     }
 
-    // Generate image using DALL-E
-    let imageUrl = null;
-    try {
-      imageUrl = await generateImageWithDALLE(recipeJson.name || trimmedDishName);
-    } catch (imageError) {
-      console.error("Failed to generate image:", imageError);
-      // Use placeholder image if generation fails
-      imageUrl = "https://images.pexels.com/photos/5773960/pexels-photo-5773960.jpeg";
-    }
+    // No image generation - will use placeholder in frontend
+    const imageUrl = null;
 
     // Save the generated recipe to database
     const savedRecipe = await sql`

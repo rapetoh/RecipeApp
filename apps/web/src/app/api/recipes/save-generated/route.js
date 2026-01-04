@@ -86,6 +86,7 @@ export async function POST(request) {
       nutrition,
       tags,
       recognitionId, // Optional: link to food_recognition_results
+      collectionIds = [], // Optional: array of collection IDs to add recipe to
     } = body;
 
     // Validation
@@ -134,11 +135,24 @@ export async function POST(request) {
       
       // Update creator info so recipe shows in "My Recipes" even after unfavoriting
       // This marks the recipe as "yours" - part of your collection
-      await sql`
-        UPDATE recipes 
-        SET creator_user_id = ${userId}::uuid
-        WHERE id = ${recipeId} AND (creator_user_id IS NULL OR creator_user_id != ${userId}::uuid)
-      `;
+      // Also set creator_type to 'ai' since this is from AI generation
+      // Update image_url if provided (important for photo recognition)
+      if (image_url) {
+        await sql`
+          UPDATE recipes 
+          SET creator_user_id = ${userId}::uuid,
+              creator_type = 'ai',
+              image_url = ${image_url}
+          WHERE id = ${recipeId}
+        `;
+      } else {
+        await sql`
+          UPDATE recipes 
+          SET creator_user_id = ${userId}::uuid,
+              creator_type = 'ai'
+          WHERE id = ${recipeId} AND (creator_user_id IS NULL OR creator_user_id != ${userId}::uuid OR creator_type != 'ai')
+        `;
+      }
     } else {
       // Recipe doesn't exist - create it
       const result = await sql`
@@ -218,6 +232,64 @@ export async function POST(request) {
         });
       }
       throw saveError;
+    }
+
+    // STEP 2.5: Always add to "Generated" system collection (only for AI-generated recipes)
+    // Verify the recipe has creator_type = 'ai' before adding to Generated collection
+    const recipeCheck = await sql`
+      SELECT creator_type FROM recipes WHERE id = ${recipeId}
+    `;
+    
+    if (recipeCheck.length > 0 && recipeCheck[0].creator_type === 'ai') {
+      const generatedCollection = await sql`
+        SELECT id FROM recipe_collections
+        WHERE user_id = ${userId}::uuid AND system_type = 'generated'
+        LIMIT 1
+      `;
+      
+      if (generatedCollection.length > 0) {
+        await sql`
+          INSERT INTO collection_recipes (collection_id, recipe_id, added_at)
+          VALUES (${generatedCollection[0].id}, ${recipeId}, NOW())
+          ON CONFLICT (collection_id, recipe_id) DO NOTHING
+        `;
+        await sql`
+          UPDATE recipe_collections
+          SET recipe_count = (SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${generatedCollection[0].id})
+          WHERE id = ${generatedCollection[0].id}
+        `;
+      }
+    }
+
+    // STEP 2.6: Add recipe to selected custom collections
+    if (Array.isArray(collectionIds) && collectionIds.length > 0) {
+      for (const collectionId of collectionIds) {
+        try {
+          // Verify collection belongs to user and is a custom collection
+          const collection = await sql`
+            SELECT id FROM recipe_collections
+            WHERE id = ${collectionId} AND user_id = ${userId}::uuid AND collection_type = 'custom'
+          `;
+          
+          if (collection.length > 0) {
+            await sql`
+              INSERT INTO collection_recipes (collection_id, recipe_id, added_at)
+              VALUES (${collectionId}, ${recipeId}, NOW())
+              ON CONFLICT (collection_id, recipe_id) DO NOTHING
+            `;
+            
+            // Update collection recipe_count
+            await sql`
+              UPDATE recipe_collections
+              SET recipe_count = (SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${collectionId})
+              WHERE id = ${collectionId}
+            `;
+          }
+        } catch (collectionError) {
+          console.error(`Error adding recipe to collection ${collectionId}:`, collectionError);
+          // Continue with other collections even if one fails
+        }
+      }
     }
 
     // STEP 3: Update food_recognition_results if recognitionId provided

@@ -35,7 +35,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -341,9 +341,17 @@ export default function CookingModeScreen() {
                     <Check size={16} color="#FFFFFF" />
                   )}
                 </View>
-                <Text style={styles.ingredientEmoji}>
-                  {getIngredientIcon(ingredient)}
-                </Text>
+                {(() => {
+                  const iconData = getIngredientIcon(ingredient);
+                  return (
+                    <Image
+                      source={{ uri: iconData.imageUrl }}
+                      style={styles.ingredientImage}
+                      contentFit="cover"
+                      defaultSource={{ uri: iconData.fallbackUrl }}
+                    />
+                  );
+                })()}
                 <View style={styles.ingredientInfo}>
                   <Text
                     style={[
@@ -775,11 +783,6 @@ const styles = StyleSheet.create({
     borderColor: "#CCCCCC",
     justifyContent: "center",
     alignItems: "center",
-  },
-  ingredientEmoji: {
-    fontSize: 28,
-    width: 40,
-    textAlign: "center",
   },
   checkboxChecked: {
     backgroundColor: "#4CAF50",

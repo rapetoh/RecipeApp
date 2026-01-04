@@ -34,8 +34,6 @@ import {
   AlertTriangle,
   ChefHat,
   Clock,
-  Bell,
-  Calendar,
   Scale,
   CheckCircle,
   X,
@@ -46,8 +44,9 @@ import {
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { IngredientIcon } from "@/components/IngredientIcon";
 
 const GOALS_OPTIONS = [
   { id: "save_time", label: "Save time", icon: Target, color: "#FF6B6B" },
@@ -162,6 +161,7 @@ export default function PreferencesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { auth } = useAuth();
+  const queryClient = useQueryClient();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -299,6 +299,12 @@ export default function PreferencesScreen() {
       if (!response.ok) {
         throw new Error(result.error || "Failed to save preferences");
       }
+
+      // Invalidate preferences cache so other components refetch with new data
+      queryClient.invalidateQueries({ queryKey: ["preferences", userId] });
+      
+      // Also invalidate recipe queries so they refetch with new measurement system
+      queryClient.invalidateQueries({ queryKey: ["recipe"] });
 
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -482,16 +488,10 @@ export default function PreferencesScreen() {
       >
         {/* Recipe Assistant Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Sliders size={24} color="#FF9F1C" />
-            <View style={styles.sectionHeaderText}>
-              <Text style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}>
-                Recipe Assistant
-              </Text>
-              <Text style={[styles.sectionSubtitle, { fontFamily: "Inter_400Regular" }]}>
-                Control how preferences are applied when generating recipes
-              </Text>
-            </View>
+          <View style={styles.infoBar}>
+            <Text style={[styles.infoBarText, { fontFamily: "Inter_400Regular" }]}>
+              Control how preferences are applied when generating recipes
+            </Text>
           </View>
 
           <View style={styles.switchRow}>
@@ -827,9 +827,7 @@ export default function PreferencesScreen() {
               <View style={styles.selectedTagsGrid}>
                 {dislikedIngredients.map((ingredient, index) => (
                   <View key={index} style={styles.selectedTag}>
-                    <Text style={styles.selectedTagEmoji}>
-                      {getIngredientIcon(ingredient)}
-                    </Text>
+                    <IngredientIcon ingredient={ingredient} size={24} />
                     <Text
                       style={[
                         styles.selectedTagText,
@@ -1010,143 +1008,6 @@ export default function PreferencesScreen() {
           </View>
         </View>
 
-        {/* Notifications & Planning Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Bell size={24} color="#4ECDC4" />
-            <View style={styles.sectionHeaderText}>
-              <Text style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}>
-                Notifications & Planning
-              </Text>
-              <Text style={[styles.sectionSubtitle, { fontFamily: "Inter_400Regular" }]}>
-                Customize your meal suggestions
-              </Text>
-            </View>
-          </View>
-
-          {/* Daily Suggestions */}
-          <View style={styles.switchRow}>
-            <View style={styles.switchRowContent}>
-              <Text
-                style={[styles.switchLabel, { fontFamily: "Inter_600SemiBold" }]}
-              >
-                Daily Meal Suggestions
-              </Text>
-              <Text
-                style={[styles.switchSubtext, { fontFamily: "Inter_400Regular" }]}
-              >
-                Get personalized recipe suggestions every day
-              </Text>
-            </View>
-            <Switch
-              value={dailySuggestionEnabled}
-              onValueChange={setDailySuggestionEnabled}
-              trackColor={{ false: "#E8E8E8", true: "#4ECDC4" }}
-              thumbColor={dailySuggestionEnabled ? "#FFFFFF" : "#CCCCCC"}
-            />
-          </View>
-
-          {dailySuggestionEnabled && (
-            <View style={styles.timeSelectionContainer}>
-              <Text
-                style={[
-                  styles.timeSelectionLabel,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Preferred time:
-              </Text>
-              <View style={styles.timeOptionsGrid}>
-                {SUGGESTION_TIMES.map((time) => {
-                  const isSelected = dailySuggestionTime === time.value;
-
-                  return (
-                    <TouchableOpacity
-                      key={time.value}
-                      style={[
-                        styles.timeOption,
-                        isSelected && styles.timeOptionSelected,
-                      ]}
-                      onPress={() => setDailySuggestionTime(time.value)}
-                    >
-                      <Text
-                        style={[
-                          styles.timeOptionText,
-                          { fontFamily: "Inter_500Medium" },
-                          isSelected && styles.timeOptionTextSelected,
-                        ]}
-                      >
-                        {time.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {/* Weekly Meal Plan */}
-          <View style={[styles.switchRow, { marginTop: 24 }]}>
-            <View style={styles.switchRowContent}>
-              <Text
-                style={[styles.switchLabel, { fontFamily: "Inter_600SemiBold" }]}
-              >
-                Weekly Meal Planning
-              </Text>
-              <Text
-                style={[styles.switchSubtext, { fontFamily: "Inter_400Regular" }]}
-              >
-                Automatically plan your meals for the week
-              </Text>
-            </View>
-            <Switch
-              value={weeklyPlanEnabled}
-              onValueChange={setWeeklyPlanEnabled}
-              trackColor={{ false: "#E8E8E8", true: "#45B7D1" }}
-              thumbColor={weeklyPlanEnabled ? "#FFFFFF" : "#CCCCCC"}
-            />
-          </View>
-
-          {weeklyPlanEnabled && (
-            <View style={styles.daysSelectionContainer}>
-              <Text
-                style={[
-                  styles.daysSelectionLabel,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Plan meals for these days:
-              </Text>
-              <View style={styles.daysGrid}>
-                {DAYS_OF_WEEK.map((day) => {
-                  const isSelected = weeklyPlanDays.includes(day.id);
-
-                  return (
-                    <TouchableOpacity
-                      key={day.id}
-                      style={[
-                        styles.dayChip,
-                        isSelected && styles.dayChipSelected,
-                      ]}
-                      onPress={() => handleDayPress(day.id)}
-                    >
-                      <Text
-                        style={[
-                          styles.dayChipText,
-                          { fontFamily: "Inter_500Medium" },
-                          isSelected && styles.dayChipTextSelected,
-                        ]}
-                      >
-                        {day.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
-
         {/* Measurement System Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -1232,44 +1093,6 @@ export default function PreferencesScreen() {
               )}
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Advanced Preferences Link */}
-        <View style={styles.advancedSection}>
-          <TouchableOpacity
-            style={styles.advancedButton}
-            onPress={() => {
-              if (Platform.OS !== "web") {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              router.push("/advanced-preferences");
-            }}
-          >
-            <View style={styles.advancedButtonContent}>
-              <View style={styles.advancedIcon}>
-                <Sliders size={20} color="#FF9F1C" />
-              </View>
-              <View style={styles.advancedText}>
-                <Text
-                  style={[
-                    styles.advancedTitle,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  Advanced Preferences
-                </Text>
-                <Text
-                  style={[
-                    styles.advancedSubtitle,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Manage diet types, allergies, cuisines, and more
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.advancedArrow}>›</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Save Button */}
@@ -1527,9 +1350,6 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: "#FF6B6B",
-  },
-  selectedTagEmoji: {
-    fontSize: 18,
   },
   selectedTagText: {
     fontSize: 12,
@@ -1804,49 +1624,15 @@ const styles = StyleSheet.create({
     borderColor: "#E8E8E8",
     marginTop: 8,
   },
-  advancedSection: {
-    marginTop: 24,
+  infoBar: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 16,
   },
-  advancedButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#FF9F1C",
-  },
-  advancedButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  advancedIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#FFF5E6",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  advancedText: {
-    flex: 1,
-  },
-  advancedTitle: {
-    fontSize: 16,
-    color: "#000000",
-    marginBottom: 4,
-  },
-  advancedSubtitle: {
-    fontSize: 14,
+  infoBarText: {
+    fontSize: 12,
     color: "#666666",
-  },
-  advancedArrow: {
-    fontSize: 24,
-    color: "#FF9F1C",
-    fontWeight: "bold",
+    lineHeight: 16,
   },
 });

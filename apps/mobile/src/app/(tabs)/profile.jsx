@@ -97,9 +97,6 @@ export default function ProfileScreen() {
       case "settings":
         router.push("/preferences");
         break;
-      case "advanced-preferences":
-        router.push("/advanced-preferences");
-        break;
       case "meal-plan-history":
         router.push("/meal-plan-history");
         break;
@@ -129,7 +126,7 @@ export default function ProfileScreen() {
     },
     {
       id: "saved",
-      title: "Saved Recipes",
+      title: "Favorite Recipes",
       subtitle: "Your favorite recipes",
       icon: Heart,
       color: "#FF9F1C",
@@ -183,14 +180,6 @@ export default function ProfileScreen() {
       color: "#607D8B",
       requiresAuth: false,
     },
-    {
-      id: "advanced-preferences",
-      title: "Advanced Preferences",
-      subtitle: "Detailed diet & allergy settings",
-      icon: Settings,
-      color: "#FF9F1C",
-      requiresAuth: false,
-    },
   ];
 
   return (
@@ -206,7 +195,7 @@ export default function ProfileScreen() {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
       >
         {/* User Profile Section */}
