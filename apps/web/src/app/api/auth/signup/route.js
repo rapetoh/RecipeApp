@@ -1,4 +1,4 @@
-import { adapter } from '@/auth';
+import { adapter } from '../../../../auth.js';
 import { hash } from 'argon2';
 import { randomBytes, randomUUID } from 'node:crypto';
 

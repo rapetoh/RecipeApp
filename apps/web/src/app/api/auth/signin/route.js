@@ -1,7 +1,7 @@
-import { adapter } from '@/auth';
+import { adapter } from '../../../../auth.js';
 import { verify } from 'argon2';
 import { randomBytes } from 'node:crypto';
-import sql from '@/app/api/utils/sql';
+import sql from '../../utils/sql.js';
 
 export async function POST(request) {
   try {
