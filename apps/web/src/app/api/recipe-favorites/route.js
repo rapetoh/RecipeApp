@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../utils/sql.js";
 
 // GET /api/recipe-favorites - Get user's favorited recipes
 export async function GET(request) {

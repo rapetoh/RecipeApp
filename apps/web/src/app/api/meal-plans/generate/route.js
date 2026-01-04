@@ -1,5 +1,5 @@
-import sql from "@/app/api/utils/sql";
-import { generateRecipeMetadataWithGPT } from "@/app/api/utils/openai";
+import sql from "../../utils/sql.js";
+import { generateRecipeMetadataWithGPT } from "../../utils/openai.js";
 
 // POST /api/meal-plans/generate - Generate 14-day meal plan (metadata only)
 export async function POST(request) {

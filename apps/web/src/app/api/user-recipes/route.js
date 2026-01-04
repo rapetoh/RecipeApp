@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../utils/sql.js";
 import { getToken } from '@auth/core/jwt';
 
 // Helper to decode JWT payload manually (since @auth/core/jwt doesn't export decodeJwt)

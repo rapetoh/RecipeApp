@@ -1,5 +1,5 @@
-import sql from "@/app/api/utils/sql";
-import { generateRecipeInstructionsWithGPT } from "@/app/api/utils/openai";
+import sql from "../../utils/sql.js";
+import { generateRecipeInstructionsWithGPT } from "../../utils/openai.js";
 
 // POST /api/meal-plans/generate-full-recipe - Generate full recipe with instructions
 export async function POST(request) {

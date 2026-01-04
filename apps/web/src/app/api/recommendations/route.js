@@ -1,5 +1,5 @@
-import sql from "@/app/api/utils/sql";
-import { getRecipeRecommendation } from "@/app/api/utils/openai";
+import sql from "../utils/sql.js";
+import { getRecipeRecommendation } from "../utils/openai.js";
 
 // GET /api/recommendations - Get daily recommendations for a user
 export async function GET(request) {

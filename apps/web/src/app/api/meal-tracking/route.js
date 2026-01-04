@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../utils/sql.js";
 
 // POST /api/meal-tracking - Track a meal (liked/disliked/neutral)
 export async function POST(request) {

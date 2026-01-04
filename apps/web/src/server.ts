@@ -14,7 +14,6 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 // In development, __dirname is src/, routes are at src/app/api
 const isProduction = process.env.NODE_ENV === 'production';
 let API_DIR = join(__dirname, 'app', 'api');
-let resolvedApiDir = API_DIR; // Store resolved API directory for use in route handlers
 
 console.log('🔍 __dirname:', __dirname);
 console.log('🔍 NODE_ENV:', process.env.NODE_ENV);
@@ -203,7 +202,6 @@ async function registerRoutes() {
         if (altStat.isDirectory()) {
           console.log(`✅ Found alternative path, using: ${altPath}`);
           apiDirToUse = altPath;
-          resolvedApiDir = altPath; // Store for later use
           found = true;
           break;
         }
@@ -330,27 +328,6 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
       image: user.image,
     },
   });
-});
-
-// CRITICAL FIX: In production, React Router intercepts POST requests before Hono can handle them
-// Register critical routes directly on main app as fallback to ensure they work
-// This is a workaround for the createHonoServer wrapping issue
-app.post('/api/preferences', async (c) => {
-  try {
-    // Import and call the preferences route handler directly
-    const preferencesRoutePath = join(resolvedApiDir, 'preferences', 'route.js');
-    const routeUrl = pathToFileURL(preferencesRoutePath).href;
-    const route = await import(/* @vite-ignore */ `${routeUrl}?update=${Date.now()}`);
-    const request = c.req.raw;
-    console.log('✅ Handling /api/preferences POST via direct route');
-    return await route.POST(request);
-  } catch (error) {
-    console.error('❌ Error in preferences POST handler:', error);
-    if (error instanceof Error) {
-      console.error('Error details:', error.message, error.stack);
-    }
-    return c.json({ error: 'Internal server error' }, 500);
-  }
 });
 
 export default await createHonoServer({

@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../../utils/sql.js";
 
 // GET /api/meal-plans/suggestions - Get meal plan suggestions for a user
 export async function GET(request) {

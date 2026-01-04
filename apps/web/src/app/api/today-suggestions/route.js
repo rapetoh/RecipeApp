@@ -1,5 +1,5 @@
-import sql from "@/app/api/utils/sql";
-import { generateTodaySuggestions } from "@/app/api/utils/openai";
+import sql from "../utils/sql.js";
+import { generateTodaySuggestions } from "../utils/openai.js";
 
 // Helper function to generate suggestions for a date (can be called async in background)
 async function generateSuggestionsForDate(userId, date) {

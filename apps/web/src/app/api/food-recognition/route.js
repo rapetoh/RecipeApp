@@ -1,5 +1,5 @@
-import sql from "@/app/api/utils/sql";
-import { analyzeImageWithVision, generateRecipeWithGPT } from "@/app/api/utils/openai";
+import sql from "../utils/sql.js";
+import { analyzeImageWithVision, generateRecipeWithGPT } from "../utils/openai.js";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {

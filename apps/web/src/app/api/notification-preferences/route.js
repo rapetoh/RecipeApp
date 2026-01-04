@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../utils/sql.js";
 
 // GET /api/notification-preferences - Get user notification preferences
 export async function GET(request) {

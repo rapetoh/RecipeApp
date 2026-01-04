@@ -1,4 +1,4 @@
-import sql from "@/app/api/utils/sql";
+import sql from "../utils/sql.js";
 import OpenAI from "openai";
 
 const openai = process.env.OPENAI_API_KEY
