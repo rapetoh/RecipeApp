@@ -50,7 +50,8 @@ export default function HomeScreen() {
     Inter_700Bold,
   });
 
-  // Check if user needs onboarding
+  // Fetch user preferences (for display purposes only)
+  // Note: Routing logic is handled in index.jsx, not here
   const { data: preferencesData, isLoading: preferencesLoading, refetch: refetchPreferences } = useQuery({
     queryKey: ["preferences", auth?.user?.id],
     queryFn: async () => {
@@ -62,34 +63,14 @@ export default function HomeScreen() {
         const result = await response.json();
         return result.success ? result.data : null;
       } catch (error) {
-        console.error("Error checking preferences:", error);
+        console.error("Error fetching preferences:", error);
         return null;
       }
     },
     enabled: !!auth?.user?.id && isAuthenticated,
-    staleTime: 0, // Always refetch to get latest data
-    refetchOnMount: true, // Refetch when component mounts
+    staleTime: 1000 * 60 * 5, // 5 minutes - no need to refetch constantly
+    refetchOnMount: true,
   });
-
-  // Redirect to onboarding if user is authenticated but hasn't completed onboarding
-  useEffect(() => {
-    // Only redirect if we're done loading and user is authenticated
-    if (
-      isAuthenticated &&
-      auth?.user?.id &&
-      !preferencesLoading &&
-      preferencesData !== undefined
-    ) {
-      // If preferences don't exist or onboardingCompleted is false, redirect to onboarding
-      if (!preferencesData || !preferencesData.onboardingCompleted) {
-        // Add a small delay to prevent race condition with cache invalidation
-        const timer = setTimeout(() => {
-          router.replace("/onboarding-goals");
-        }, 200);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [isAuthenticated, auth?.user?.id, preferencesData, preferencesLoading, router]);
 
   // Fetch daily recommendations
   const { data: recommendationData, isLoading: recommendationLoading } =

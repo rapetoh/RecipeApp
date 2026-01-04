@@ -21,7 +21,6 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { ArrowLeft } from "lucide-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
@@ -93,8 +92,8 @@ export default function SignInScreen() {
         user: data.user,
       });
 
-      // Navigate back
-      router.back();
+      // Navigate to root - index.jsx will handle routing based on auth state
+      router.replace("/");
 
     } catch (err) {
       console.error('Signin error:', err);
@@ -116,12 +115,7 @@ export default function SignInScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={24} color="#000000" />
-        </TouchableOpacity>
+        <View style={styles.backButton} />
         <Text style={[styles.headerTitle, { fontFamily: "Inter_700Bold" }]}>
           Sign In
         </Text>
