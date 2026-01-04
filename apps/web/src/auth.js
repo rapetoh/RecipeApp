@@ -1,7 +1,7 @@
 import { initAuthConfig } from '@hono/auth-js';
 import Credentials from '@auth/core/providers/credentials';
 import { hash, verify } from 'argon2';
-import sql from '@/app/api/utils/sql';
+import sql from './app/api/utils/sql.js';
 
 function Adapter(client) {
   return {
