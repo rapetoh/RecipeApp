@@ -149,6 +149,105 @@ app.get('/api/auth/signup', (c) => {
   return c.html('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Method Not Allowed</title></head><body><p>This endpoint only accepts POST requests. Please use the signup form.</p><script>setTimeout(() => window.location.href = "/account/signup", 2000);</script></body></html>', 405);
 });
 
+// CRITICAL FIX: Handle OAuth GET requests for mobile apps
+// Auth.js requires POST to /api/auth/signin/:provider with CSRF token
+// This endpoint handles GET requests by auto-submitting a form
+app.get('/api/auth/oauth/:provider', async (c) => {
+  const provider = c.req.param('provider');
+  const callbackUrl = c.req.query('callbackUrl') || '/';
+  const protocol = 'https';
+  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
+  const baseUrl = `${protocol}://${host}`;
+  
+  console.log(`🔐 OAuth redirect for provider: ${provider}, callbackUrl: ${callbackUrl}`);
+  
+  // Fetch CSRF token from Auth.js
+  try {
+    const csrfResponse = await fetch(`${baseUrl}/api/auth/csrf`, {
+      headers: {
+        'Cookie': c.req.header('Cookie') || '',
+      },
+    });
+    
+    if (!csrfResponse.ok) {
+      console.error('❌ Failed to get CSRF token');
+      return c.html('<!DOCTYPE html><html><body><p>Error: Could not initialize OAuth flow</p></body></html>', 500);
+    }
+    
+    const csrfData = await csrfResponse.json() as { csrfToken: string };
+    const csrfToken = csrfData.csrfToken;
+    
+    // Set the CSRF cookie from the response
+    const setCookieHeader = csrfResponse.headers.get('set-cookie');
+    if (setCookieHeader) {
+      c.header('Set-Cookie', setCookieHeader);
+    }
+    
+    // Return an HTML page that auto-submits a form to the OAuth provider
+    // This bridges the GET request to Auth.js's required POST
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting to ${provider}...</title>
+  <style>
+    body { 
+      font-family: system-ui, -apple-system, sans-serif; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      height: 100vh; 
+      margin: 0;
+      background: #f5f5f5;
+    }
+    .loader { 
+      text-align: center; 
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #ddd;
+      border-top-color: #3B82F6;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loader">
+    <div class="spinner"></div>
+    <p>Redirecting to ${provider}...</p>
+  </div>
+  <form id="oauth-form" action="${baseUrl}/api/auth/signin/${provider}" method="POST" style="display:none;">
+    <input type="hidden" name="csrfToken" value="${csrfToken}" />
+    <input type="hidden" name="callbackUrl" value="${callbackUrl}" />
+  </form>
+  <script>
+    document.getElementById('oauth-form').submit();
+  </script>
+</body>
+</html>`;
+    
+    return c.html(html);
+  } catch (error) {
+    console.error('❌ OAuth redirect error:', error);
+    return c.html('<!DOCTYPE html><html><body><p>Error: Could not initialize OAuth flow</p></body></html>', 500);
+  }
+});
+
+// Also handle the pattern /api/auth/signin/:provider for backwards compatibility
+// This intercepts before Auth.js and redirects to our oauth endpoint
+app.get('/api/auth/signin/:provider', (c) => {
+  const provider = c.req.param('provider');
+  const callbackUrl = c.req.query('callbackUrl') || '/';
+  // Redirect to our oauth endpoint which handles the POST flow
+  return c.redirect(`/api/auth/oauth/${provider}?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+});
+
 // Register auth routes AFTER custom endpoints
 // This must be registered on the main app, not the api sub-app
 const authMiddleware = authHandler();

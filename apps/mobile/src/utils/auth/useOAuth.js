@@ -19,8 +19,9 @@ export function useOAuth() {
       const apiUrl = getApiUrl();
       const callbackUrl = `${apiUrl}/api/auth/token`;
       
-      // Auth.js OAuth URL format: /api/auth/signin/[provider]
-      const oauthUrl = `${apiUrl}/api/auth/signin/${provider}?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+      // Use custom OAuth endpoint that handles CSRF token and form submission
+      // Auth.js requires POST with CSRF token, this endpoint bridges GET to POST
+      const oauthUrl = `${apiUrl}/api/auth/oauth/${provider}?callbackUrl=${encodeURIComponent(callbackUrl)}`;
       
       // Open browser for OAuth flow
       const result = await WebBrowser.openAuthSessionAsync(oauthUrl, callbackUrl);
