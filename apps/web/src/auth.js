@@ -243,13 +243,22 @@ export const getAuthConfig = () => {
   ];
 
   // Add Google OAuth provider if credentials are configured
+  console.log('🔍 Checking Google OAuth credentials:', {
+    hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+    hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+    clientIdPreview: process.env.GOOGLE_CLIENT_ID ? `${process.env.GOOGLE_CLIENT_ID.substring(0, 20)}...` : 'missing',
+  });
+  
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    console.log('✅ Adding Google OAuth provider');
     providers.push(
       Google({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       })
     );
+  } else {
+    console.log('❌ Google OAuth provider NOT added - missing credentials');
   }
 
   // Add Apple OAuth provider if credentials are configured
@@ -259,6 +268,7 @@ export const getAuthConfig = () => {
     process.env.APPLE_KEY_ID &&
     process.env.APPLE_PRIVATE_KEY
   ) {
+    console.log('✅ Adding Apple OAuth provider');
     providers.push(
       Apple({
         clientId: process.env.APPLE_CLIENT_ID,
@@ -268,6 +278,12 @@ export const getAuthConfig = () => {
       })
     );
   }
+
+  console.log(`🔍 Total providers: ${providers.length}`);
+  console.log('🔍 Provider IDs:', providers.map(p => {
+    const id = p.id || (p.name && p.name.toLowerCase()) || 'unknown';
+    return id;
+  }).join(', '));
 
   return {
     adapter,
