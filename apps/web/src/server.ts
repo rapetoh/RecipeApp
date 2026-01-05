@@ -71,10 +71,9 @@ app.use('*', initAuthConfig((c) => {
     trustHost: true,
   };
   
-  // Set URL for OAuth callback generation (required for OAuth providers)
-  if (process.env.AUTH_URL) {
-    authConfig.url = process.env.AUTH_URL;
-  } else {
+  // Only set url manually if AUTH_URL is NOT set as env var
+  // When AUTH_URL exists, Auth.js auto-detects it - don't set it manually to avoid conflicts
+  if (!process.env.AUTH_URL) {
     // Fallback: construct URL from request headers if AUTH_URL not set
     const protocol = c.req.header('x-forwarded-proto') || 'https';
     const host = c.req.header('host') || c.req.header('x-forwarded-host');
@@ -82,6 +81,7 @@ app.use('*', initAuthConfig((c) => {
       authConfig.url = `${protocol}://${host}`;
     }
   }
+  // If AUTH_URL is set, Auth.js uses it automatically - no manual setting needed
   
   return authConfig;
 }));
