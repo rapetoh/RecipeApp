@@ -63,12 +63,28 @@ const app = new Hono();
 const api = new Hono(); // Separate Hono instance for API routes
 
 // Initialize auth middleware
-app.use('*', initAuthConfig((c) => ({
-  ...getAuthConfig(),
-  secret: process.env.AUTH_SECRET || 'fallback-secret-change-in-production',
-  basePath: '/api/auth',
-  trustHost: true,
-})));
+app.use('*', initAuthConfig((c) => {
+  const authConfig = {
+    ...getAuthConfig(),
+    secret: process.env.AUTH_SECRET || 'fallback-secret-change-in-production',
+    basePath: '/api/auth',
+    trustHost: true,
+  };
+  
+  // Set URL for OAuth callback generation (required for OAuth providers)
+  if (process.env.AUTH_URL) {
+    authConfig.url = process.env.AUTH_URL;
+  } else {
+    // Fallback: construct URL from request headers if AUTH_URL not set
+    const protocol = c.req.header('x-forwarded-proto') || 'https';
+    const host = c.req.header('host') || c.req.header('x-forwarded-host');
+    if (host) {
+      authConfig.url = `${protocol}://${host}`;
+    }
+  }
+  
+  return authConfig;
+}));
 
 // CORS middleware
 app.use('*', cors({

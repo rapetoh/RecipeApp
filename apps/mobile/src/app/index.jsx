@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { useRoutingContext } from "@/contexts/RoutingContext";
 
 /**
  * Root index component that handles initial routing logic:
@@ -14,6 +14,7 @@ export default function Index() {
   const router = useRouter();
   const { isReady, isAuthenticated } = useAuth();
   const { needsOnboarding, isLoading: onboardingLoading } = useOnboardingStatus();
+  const { setRoutingComplete } = useRoutingContext();
 
   useEffect(() => {
     // Wait for auth to be ready
@@ -24,6 +25,7 @@ export default function Index() {
     // If not authenticated, redirect to sign in
     if (!isAuthenticated) {
       router.replace("/account/signin");
+      setRoutingComplete(true);
       return;
     }
 
@@ -35,29 +37,18 @@ export default function Index() {
     // If onboarding is needed, redirect to onboarding
     if (needsOnboarding === true) {
       router.replace("/onboarding-goals");
+      setRoutingComplete(true);
       return;
     }
 
     // If onboarding is complete, redirect to home
     if (needsOnboarding === false) {
       router.replace("/(tabs)/home");
+      setRoutingComplete(true);
       return;
     }
-  }, [isReady, isAuthenticated, needsOnboarding, onboardingLoading, router]);
+  }, [isReady, isAuthenticated, needsOnboarding, onboardingLoading, router, setRoutingComplete]);
 
-  // Show loading screen while determining route
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#007AFF" />
-    </View>
-  );
+  // Return null - splash screen handles loading state
+  return null;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-});

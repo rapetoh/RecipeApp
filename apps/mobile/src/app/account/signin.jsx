@@ -22,6 +22,7 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import { useAuth } from "@/utils/auth/useAuth";
+import { useOAuth } from "@/utils/auth/useOAuth";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 
@@ -36,10 +37,12 @@ export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { setAuth } = useAuth();
+  const { signInWithGoogle, signInWithApple } = useOAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(null); // 'google' | 'apple' | null
   const [error, setError] = useState(null);
 
   const [fontsLoaded] = useFonts({
@@ -143,6 +146,69 @@ export default function SignInScreen() {
               </Text>
             </View>
           )}
+
+          {/* OAuth Buttons */}
+          <View style={styles.oauthContainer}>
+            <TouchableOpacity
+              style={[styles.oauthButton, oauthLoading === 'google' && styles.oauthButtonDisabled]}
+              onPress={async () => {
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                setError(null);
+                setOauthLoading('google');
+                try {
+                  await signInWithGoogle();
+                } catch (err) {
+                  setError('Google sign in failed. Please try again.');
+                  setOauthLoading(null);
+                }
+              }}
+              disabled={oauthLoading !== null || loading}
+            >
+              {oauthLoading === 'google' ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={[styles.oauthButtonText, { fontFamily: "Inter_600SemiBold" }]}>
+                  Continue with Google
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[styles.oauthButton, styles.oauthButtonApple, oauthLoading === 'apple' && styles.oauthButtonDisabled]}
+                onPress={async () => {
+                  if (Platform.OS !== "web") {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  setError(null);
+                  setOauthLoading('apple');
+                  try {
+                    await signInWithApple();
+                  } catch (err) {
+                    setError('Apple sign in failed. Please try again.');
+                    setOauthLoading(null);
+                  }
+                }}
+                disabled={oauthLoading !== null || loading}
+              >
+                {oauthLoading === 'apple' ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={[styles.oauthButtonText, { fontFamily: "Inter_600SemiBold" }]}>
+                    Continue with Apple
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={[styles.dividerText, { fontFamily: "Inter_400Regular" }]}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+          </View>
 
           <View style={styles.form}>
             <View style={styles.inputGroup}>
@@ -270,6 +336,42 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     color: "#DC2626",
+  },
+  oauthContainer: {
+    marginBottom: 24,
+  },
+  oauthButton: {
+    backgroundColor: "#4285F4",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  oauthButtonApple: {
+    backgroundColor: "#000000",
+  },
+  oauthButtonDisabled: {
+    opacity: 0.6,
+  },
+  oauthButtonText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E0E0E0",
+  },
+  dividerText: {
+    fontSize: 14,
+    color: "#999999",
+    paddingHorizontal: 16,
   },
   form: {
     flex: 1,

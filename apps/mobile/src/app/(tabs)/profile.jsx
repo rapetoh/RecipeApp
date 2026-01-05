@@ -30,9 +30,12 @@ import {
   Calendar,
   ShoppingCart,
   DollarSign,
+  Edit,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 
 export default function ProfileScreen() {
@@ -66,6 +69,24 @@ export default function ProfileScreen() {
       },
     ]);
   };
+
+  // Fetch user stats
+  const { data: userStats } = useQuery({
+    queryKey: ['user-stats', auth?.user?.id],
+    queryFn: async () => {
+      if (!auth?.user?.id) return null;
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/user/me?userId=${auth.user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${auth.jwt}`,
+        },
+      });
+      if (!response.ok) return null;
+      const result = await response.json();
+      return result.success ? result.data.stats : { recipeCount: 0, favoriteCount: 0 };
+    },
+    enabled: !!auth?.user?.id && isAuthenticated && !!auth?.jwt,
+  });
 
   const handleMenuPress = (action, requiresAuth = true) => {
     if (Platform.OS !== "web") {
@@ -201,34 +222,44 @@ export default function ProfileScreen() {
         {/* User Profile Section */}
         {isAuthenticated ? (
           <View style={styles.userSection}>
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <User size={40} color="#666666" />
+            <View style={styles.userInfoRow}>
+              <View style={styles.avatarContainer}>
+                <View style={styles.avatar}>
+                  <User size={40} color="#666666" />
+                </View>
               </View>
+              <View style={styles.userInfo}>
+                <Text style={[styles.userName, { fontFamily: "Inter_700Bold" }]}>
+                  {auth?.user?.name || "User"}
+                </Text>
+                <Text
+                  style={[styles.userEmail, { fontFamily: "Inter_400Regular" }]}
+                >
+                  {auth?.user?.email}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => router.push("/edit-profile")}
+              >
+                <Edit size={20} color="#FF9F1C" />
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.userName, { fontFamily: "Inter_700Bold" }]}>
-              {auth?.user?.name || "User"}
-            </Text>
-            <Text
-              style={[styles.userEmail, { fontFamily: "Inter_400Regular" }]}
-            >
-              {auth?.user?.email}
-            </Text>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <ChefHat size={16} color="#FF9F1C" />
                 <Text
                   style={[styles.statText, { fontFamily: "Inter_500Medium" }]}
                 >
-                  12 Recipes
+                  {userStats?.recipeCount || 0} Recipes
                 </Text>
               </View>
               <View style={styles.statItem}>
-                <Star size={16} color="#FF9F1C" />
+                <Heart size={16} color="#FF9F1C" />
                 <Text
                   style={[styles.statText, { fontFamily: "Inter_500Medium" }]}
                 >
-                  4.8 Rating
+                  {userStats?.favoriteCount || 0} Favorites
                 </Text>
               </View>
             </View>
@@ -367,32 +398,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userSection: {
-    alignItems: "center",
     paddingVertical: 32,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
+  userInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   avatarContainer: {
-    marginBottom: 16,
+    marginRight: 16,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#F8F8F8",
     justifyContent: "center",
     alignItems: "center",
   },
+  userInfo: {
+    flex: 1,
+  },
   userName: {
-    fontSize: 24,
+    fontSize: 20,
     color: "#000000",
     marginBottom: 4,
   },
   userEmail: {
-    fontSize: 16,
+    fontSize: 14,
     color: "#666666",
-    marginBottom: 20,
+  },
+  editButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF5E6",
+    justifyContent: "center",
+    alignItems: "center",
   },
   statsRow: {
     flexDirection: "row",

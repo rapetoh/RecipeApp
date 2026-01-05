@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Switch,
   Platform,
   ActivityIndicator,
   Alert,
@@ -23,7 +22,6 @@ import {
   ArrowRight,
   ArrowLeft,
   Bell,
-  Calendar,
   Scale,
   CheckCircle,
 } from "lucide-react-native";
@@ -32,23 +30,6 @@ import { useAuth } from "@/utils/auth/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
-
-const DAYS_OF_WEEK = [
-  { id: "mon", label: "Mon", fullLabel: "Monday" },
-  { id: "tue", label: "Tue", fullLabel: "Tuesday" },
-  { id: "wed", label: "Wed", fullLabel: "Wednesday" },
-  { id: "thu", label: "Thu", fullLabel: "Thursday" },
-  { id: "fri", label: "Fri", fullLabel: "Friday" },
-  { id: "sat", label: "Sat", fullLabel: "Saturday" },
-  { id: "sun", label: "Sun", fullLabel: "Sunday" },
-];
-
-const TIME_OPTIONS = [
-  { value: "08:00", label: "8:00 AM" },
-  { value: "12:00", label: "12:00 PM" },
-  { value: "18:00", label: "6:00 PM" },
-  { value: "20:00", label: "8:00 PM" },
-];
 
 export default function OnboardingNotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -71,16 +52,6 @@ export default function OnboardingNotificationsScreen() {
   const preferredCookingTime = params.preferredCookingTime || "15_30";
   const peopleCount = parseInt(params.peopleCount) || 1;
 
-  const [dailySuggestionEnabled, setDailySuggestionEnabled] = useState(true);
-  const [dailySuggestionTime, setDailySuggestionTime] = useState("18:00");
-  const [weeklyPlanEnabled, setWeeklyPlanEnabled] = useState(false);
-  const [weeklyPlanDays, setWeeklyPlanDays] = useState([
-    "mon",
-    "tue",
-    "wed",
-    "thu",
-    "fri",
-  ]);
   const [measurementSystem, setMeasurementSystem] = useState("metric");
   const [loading, setLoading] = useState(false);
   const [notificationPermissionAsked, setNotificationPermissionAsked] = useState(false);
@@ -125,26 +96,6 @@ export default function OnboardingNotificationsScreen() {
     }
   };
 
-  const handleTimePress = (timeValue) => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setDailySuggestionTime(timeValue);
-  };
-
-  const handleDayPress = (dayId) => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    setWeeklyPlanDays((prev) => {
-      if (prev.includes(dayId)) {
-        return prev.filter((d) => d !== dayId);
-      } else {
-        return [...prev, dayId];
-      }
-    });
-  };
 
   const handleMeasurementPress = (system) => {
     if (Platform.OS !== "web") {
@@ -178,10 +129,6 @@ export default function OnboardingNotificationsScreen() {
         cookingSkill,
         preferredCookingTime,
         peopleCount,
-        dailySuggestionEnabled,
-        dailySuggestionTime,
-        weeklyPlanEnabled,
-        weeklyPlanDays,
         measurementSystem,
         onboardingCompleted: true,
       };
@@ -283,7 +230,7 @@ export default function OnboardingNotificationsScreen() {
                   { fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                Notifications Enabled
+                Notification Permission
               </Text>
               <Text
                 style={[
@@ -291,145 +238,11 @@ export default function OnboardingNotificationsScreen() {
                   { fontFamily: "Inter_400Regular" },
                 ]}
               >
-                You'll receive helpful reminders about meal suggestions, cooking times, and grocery lists.
+                We'll ask for permission to send you notifications. You can change this later in your device settings.
               </Text>
             </View>
           </View>
         )}
-
-        {/* Daily Suggestions Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Bell size={24} color="#4ECDC4" />
-            <View style={styles.sectionHeaderText}>
-              <Text
-                style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}
-              >
-                Daily Meal Suggestions
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: "Inter_400Regular" },
-                ]}
-              >
-                Get personalized recipe suggestions every day
-              </Text>
-            </View>
-            <Switch
-              value={dailySuggestionEnabled}
-              onValueChange={setDailySuggestionEnabled}
-              trackColor={{ false: "#E8E8E8", true: "#4ECDC4" }}
-              thumbColor={dailySuggestionEnabled ? "#FFFFFF" : "#CCCCCC"}
-            />
-          </View>
-
-          {dailySuggestionEnabled && (
-            <View style={styles.timeSelectionContainer}>
-              <Text
-                style={[
-                  styles.timeSelectionLabel,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Preferred time:
-              </Text>
-              <View style={styles.timeOptionsGrid}>
-                {TIME_OPTIONS.map((time) => {
-                  const isSelected = dailySuggestionTime === time.value;
-
-                  return (
-                    <TouchableOpacity
-                      key={time.value}
-                      style={[
-                        styles.timeOption,
-                        isSelected && styles.timeOptionSelected,
-                      ]}
-                      onPress={() => handleTimePress(time.value)}
-                    >
-                      <Text
-                        style={[
-                          styles.timeOptionText,
-                          { fontFamily: "Inter_500Medium" },
-                          isSelected && styles.timeOptionTextSelected,
-                        ]}
-                      >
-                        {time.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Weekly Meal Plan Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Calendar size={24} color="#45B7D1" />
-            <View style={styles.sectionHeaderText}>
-              <Text
-                style={[styles.sectionTitle, { fontFamily: "Inter_700Bold" }]}
-              >
-                Weekly Meal Planning
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: "Inter_400Regular" },
-                ]}
-              >
-                Automatically plan your meals for the week
-              </Text>
-            </View>
-            <Switch
-              value={weeklyPlanEnabled}
-              onValueChange={setWeeklyPlanEnabled}
-              trackColor={{ false: "#E8E8E8", true: "#45B7D1" }}
-              thumbColor={weeklyPlanEnabled ? "#FFFFFF" : "#CCCCCC"}
-            />
-          </View>
-
-          {weeklyPlanEnabled && (
-            <View style={styles.daysSelectionContainer}>
-              <Text
-                style={[
-                  styles.daysSelectionLabel,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Plan meals for these days:
-              </Text>
-              <View style={styles.daysGrid}>
-                {DAYS_OF_WEEK.map((day) => {
-                  const isSelected = weeklyPlanDays.includes(day.id);
-
-                  return (
-                    <TouchableOpacity
-                      key={day.id}
-                      style={[
-                        styles.dayChip,
-                        isSelected && styles.dayChipSelected,
-                      ]}
-                      onPress={() => handleDayPress(day.id)}
-                    >
-                      <Text
-                        style={[
-                          styles.dayChipText,
-                          { fontFamily: "Inter_500Medium" },
-                          isSelected && styles.dayChipTextSelected,
-                        ]}
-                      >
-                        {day.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
 
         {/* Measurement System Section */}
         <View style={styles.section}>

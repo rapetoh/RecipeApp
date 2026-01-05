@@ -1,5 +1,7 @@
 import { initAuthConfig } from '@hono/auth-js';
 import Credentials from '@auth/core/providers/credentials';
+import Google from '@auth/core/providers/google';
+import Apple from '@auth/core/providers/apple';
 import { hash, verify } from 'argon2';
 import sql from './app/api/utils/sql.js';
 
@@ -171,9 +173,8 @@ function Adapter(client) {
 const adapter = Adapter();
 
 // Export the config function (not the middleware handler)
-export const getAuthConfig = () => ({
-  adapter,
-  providers: [
+export const getAuthConfig = () => {
+  const providers = [
     Credentials({
       id: 'credentials',
       name: 'Credentials',
@@ -239,12 +240,44 @@ export const getAuthConfig = () => ({
         }
       },
     }),
-  ],
-  pages: {
-    signIn: '/account/signin',
-    signOut: '/account/logout',
-  },
-});
+  ];
+
+  // Add Google OAuth provider if credentials are configured
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    providers.push(
+      Google({
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      })
+    );
+  }
+
+  // Add Apple OAuth provider if credentials are configured
+  if (
+    process.env.APPLE_CLIENT_ID &&
+    process.env.APPLE_TEAM_ID &&
+    process.env.APPLE_KEY_ID &&
+    process.env.APPLE_PRIVATE_KEY
+  ) {
+    providers.push(
+      Apple({
+        clientId: process.env.APPLE_CLIENT_ID,
+        teamId: process.env.APPLE_TEAM_ID,
+        keyId: process.env.APPLE_KEY_ID,
+        privateKey: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      })
+    );
+  }
+
+  return {
+    adapter,
+    providers,
+    pages: {
+      signIn: '/account/signin',
+      signOut: '/account/logout',
+    },
+  };
+};
 
 // Also export adapter for direct use if needed
 export { adapter };
