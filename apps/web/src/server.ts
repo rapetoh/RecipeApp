@@ -67,21 +67,23 @@ app.use('*', initAuthConfig((c) => {
   const authConfig = {
     ...getAuthConfig(),
     secret: process.env.AUTH_SECRET || 'fallback-secret-change-in-production',
-    basePath: '/api/auth',
     trustHost: true,
   };
   
-  // Only set url manually if AUTH_URL is NOT set as env var
-  // When AUTH_URL exists, Auth.js auto-detects it - don't set it manually to avoid conflicts
-  if (!process.env.AUTH_URL) {
-    // Fallback: construct URL from request headers if AUTH_URL not set
+  // When AUTH_URL is set, Auth.js auto-detects it - don't set basePath (causes conflict)
+  // When AUTH_URL is NOT set, set both basePath and url manually
+  if (process.env.AUTH_URL) {
+    // AUTH_URL is set - Auth.js handles everything automatically
+    // Do NOT set basePath - it causes "env-url-basepath-redundant" warning
+  } else {
+    // AUTH_URL not set - set both basePath and url for local dev
+    authConfig.basePath = '/api/auth';
     const protocol = c.req.header('x-forwarded-proto') || 'https';
     const host = c.req.header('host') || c.req.header('x-forwarded-host');
     if (host) {
       authConfig.url = `${protocol}://${host}`;
     }
   }
-  // If AUTH_URL is set, Auth.js uses it automatically - no manual setting needed
   
   return authConfig;
 }));
