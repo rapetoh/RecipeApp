@@ -67,17 +67,18 @@ app.use('*', initAuthConfig((c) => {
   const authConfig = {
     ...getAuthConfig(),
     secret: process.env.AUTH_SECRET || 'fallback-secret-change-in-production',
-    basePath: '/api/auth', // Always set this - Auth.js needs it to parse routes
+    basePath: '/api/auth',
     trustHost: true,
+    debug: true, // Enable debug logging for Auth.js
   };
   
-  // Always construct URL from headers (works in both dev and production)
-  // This avoids the AUTH_URL/basePath conflict entirely
-  const protocol = c.req.header('x-forwarded-proto') || 'https';
-  const host = c.req.header('host') || c.req.header('x-forwarded-host');
-  if (host) {
-    authConfig.url = `${protocol}://${host}`;
-  }
+  // Always use HTTPS in production (Render always uses HTTPS)
+  const protocol = 'https'; // Force HTTPS - Render always uses HTTPS
+  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
+  authConfig.url = `${protocol}://${host}`;
+  
+  console.log('🔍 Auth config URL:', authConfig.url);
+  console.log('🔍 Auth config basePath:', authConfig.basePath);
   
   return authConfig;
 }));
