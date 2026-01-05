@@ -62,10 +62,15 @@ console.log('✅ Resolved API directory:', RESOLVED_API_DIR);
 const app = new Hono();
 const api = new Hono(); // Separate Hono instance for API routes
 
+// Cache the base auth config (providers don't change per-request)
+// This ensures providers are loaded once and reused, preventing potential issues
+const baseAuthConfig = getAuthConfig();
+console.log('✅ Base auth config loaded with', baseAuthConfig.providers?.length || 0, 'providers');
+
 // Initialize auth middleware
 app.use('*', initAuthConfig((c) => {
   const authConfig = {
-    ...getAuthConfig(),
+    ...baseAuthConfig, // Use cached config instead of calling getAuthConfig() every time
     secret: process.env.AUTH_SECRET || 'fallback-secret-change-in-production',
     basePath: '/api/auth',
     trustHost: true,
@@ -73,12 +78,9 @@ app.use('*', initAuthConfig((c) => {
   };
   
   // Always use HTTPS in production (Render always uses HTTPS)
-  const protocol = 'https'; // Force HTTPS - Render always uses HTTPS
+  const protocol = 'https';
   const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
   authConfig.url = `${protocol}://${host}`;
-  
-  console.log('🔍 Auth config URL:', authConfig.url);
-  console.log('🔍 Auth config basePath:', authConfig.basePath);
   
   return authConfig;
 }));
