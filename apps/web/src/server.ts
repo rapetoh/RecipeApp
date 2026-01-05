@@ -71,17 +71,13 @@ app.use('*', initAuthConfig((c) => {
     trustHost: true,
   };
   
-  // Only set url manually if AUTH_URL is NOT set
-  // When AUTH_URL exists, Auth.js uses it automatically - don't set url manually to avoid conflicts
-  if (!process.env.AUTH_URL) {
-    // AUTH_URL not set - construct URL from request headers for local dev
-    const protocol = c.req.header('x-forwarded-proto') || 'https';
-    const host = c.req.header('host') || c.req.header('x-forwarded-host');
-    if (host) {
-      authConfig.url = `${protocol}://${host}`;
-    }
+  // Always construct URL from headers (works in both dev and production)
+  // This avoids the AUTH_URL/basePath conflict entirely
+  const protocol = c.req.header('x-forwarded-proto') || 'https';
+  const host = c.req.header('host') || c.req.header('x-forwarded-host');
+  if (host) {
+    authConfig.url = `${protocol}://${host}`;
   }
-  // If AUTH_URL is set, Auth.js uses it automatically - no manual url setting needed
   
   return authConfig;
 }));
