@@ -326,17 +326,18 @@ app.use('/api/auth/callback/*', async (c, next) => {
         newLocation = location + '/?mobile_oauth=1';
       }
       
-      // Create new response with modified Location header
+      console.log('🔐 Modified redirect to:', newLocation);
+      
+      // CRITICAL: Must RETURN the new response, not assign to c.res
+      // After await next(), assigning to c.res doesn't send the new response
       const headers = new Headers(c.res.headers);
       headers.set('Location', newLocation);
       
-      c.res = new Response(c.res.body, {
+      return new Response(c.res.body, {
         status: c.res.status,
         statusText: c.res.statusText,
         headers: headers,
       });
-      
-      console.log('🔐 Modified redirect to:', newLocation);
     }
   }
 });
