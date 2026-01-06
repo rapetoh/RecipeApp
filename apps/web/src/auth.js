@@ -259,6 +259,8 @@ export const getAuthConfig = () => {
         // Both PKCE and state use __Secure- cookies which don't persist
         // in mobile embedded browsers (expo-web-browser)
         checks: [],
+        // Allow linking OAuth account to existing email account
+        allowDangerousEmailAccountLinking: true,
         authorization: {
           params: {
             prompt: "consent",
@@ -287,6 +289,8 @@ export const getAuthConfig = () => {
         privateKey: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
         // Disable all verification checks for mobile compatibility
         checks: [],
+        // Allow linking OAuth account to existing email account
+        allowDangerousEmailAccountLinking: true,
       })
     );
   }
