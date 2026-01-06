@@ -297,51 +297,6 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
   }
 });
 
-// INTERCEPT CALLBACK REDIRECTS: Force mobile OAuth parameter
-// Auth.js ignores our callbackUrl, so we intercept the redirect response
-// and add ?mobile_oauth=1 to ensure mobile flows are detected
-app.use('/api/auth/callback/*', async (c, next) => {
-  await next();
-  
-  // Check if Auth.js returned a redirect to /
-  const location = c.res.headers.get('Location');
-  console.log('🔐 Callback response Location header:', location);
-  
-  if (location) {
-    // Check if redirect is to root (with or without domain)
-    const isRootRedirect = location === '/' || 
-                           location.endsWith('.onrender.com/') ||
-                           location.match(/^https?:\/\/[^\/]+\/?$/);
-    
-    if (isRootRedirect) {
-      console.log('🔐 Intercepting root redirect, adding mobile_oauth param');
-      
-      // Modify the redirect to include mobile_oauth parameter
-      let newLocation = location;
-      if (location === '/') {
-        newLocation = '/?mobile_oauth=1';
-      } else if (location.endsWith('/')) {
-        newLocation = location + '?mobile_oauth=1';
-      } else {
-        newLocation = location + '/?mobile_oauth=1';
-      }
-      
-      console.log('🔐 Modified redirect to:', newLocation);
-      
-      // CRITICAL: Must RETURN the new response, not assign to c.res
-      // After await next(), assigning to c.res doesn't send the new response
-      const headers = new Headers(c.res.headers);
-      headers.set('Location', newLocation);
-      
-      return new Response(c.res.body, {
-        status: c.res.status,
-        statusText: c.res.statusText,
-        headers: headers,
-      });
-    }
-  }
-});
-
 // Register auth routes AFTER custom endpoints
 // This must be registered on the main app, not the api sub-app
 const authMiddleware = authHandler();
@@ -357,23 +312,40 @@ app.use('/api/auth/*', async (c, next) => {
 });
 
 // MOBILE OAUTH COMPLETION HANDLER
-// After Auth.js completes OAuth callback, it redirects to "/?mobile_oauth=1" 
-// We intercept this to redirect mobile OAuth flows to the app
+// After Auth.js completes OAuth callback, it redirects to "/"
+// We detect mobile OAuth completion using User-Agent + fresh session
+// This is more reliable than trying to intercept/modify the Auth.js redirect
 app.get('/', verifyAuth(), async (c, next) => {
-  // Check for mobile OAuth query parameter (more reliable than cookies)
-  const isMobileOAuth = c.req.query('mobile_oauth') === '1';
+  const userAgent = c.req.header('User-Agent') || '';
   
-  console.log('🔐 GET / accessed, mobile_oauth param:', c.req.query('mobile_oauth'));
+  // Detect mobile browser/WebView
+  const isMobile = userAgent.includes('Mobile') || 
+                   userAgent.includes('iPhone') || 
+                   userAgent.includes('iPad') ||
+                   userAgent.includes('Android') ||
+                   (userAgent.includes('Safari') && !userAgent.includes('Chrome'));
   
-  if (isMobileOAuth) {
-    console.log('🔐 Mobile OAuth completion detected at /?mobile_oauth=1');
-    
+  console.log('🔐 GET / accessed, User-Agent mobile:', isMobile);
+  
+  const authUser = c.get('authUser');
+  
+  // If mobile browser AND has session, check if it's a fresh OAuth completion
+  if (isMobile && authUser?.session && authUser?.user) {
     try {
-      const authUser = c.get('authUser');
-      console.log('🔐 authUser:', authUser ? 'found' : 'not found');
+      const { session, user } = authUser;
       
-      if (authUser && authUser.session && authUser.user) {
-        const { session, user } = authUser;
+      // Check if session is fresh (created within last 2 minutes)
+      // Session expires ~30 days from creation, so expires > 29 days from now = fresh
+      const expires = new Date((session as any).expires);
+      const twentyNineDaysFromNow = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000);
+      const isFreshSession = expires > twentyNineDaysFromNow;
+      
+      console.log('🔐 Session expires:', expires.toISOString());
+      console.log('🔐 Is fresh session:', isFreshSession);
+      
+      if (isFreshSession) {
+        console.log('🔐 Mobile OAuth completion detected via User-Agent + fresh session');
+        
         const sessionAny = session as any;
         const jwt = sessionAny.sessionToken || sessionAny.id;
         const userData = {
@@ -388,13 +360,10 @@ app.get('/', verifyAuth(), async (c, next) => {
         // Redirect to mobile app with token
         const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
         return c.redirect(redirectUrl);
-      } else {
-        console.log('❌ Mobile OAuth but no session - user not authenticated');
-        return c.redirect('recipeapp://oauth/callback?error=no_session');
       }
     } catch (error) {
       console.error('❌ Mobile OAuth completion error:', error);
-      return c.redirect('recipeapp://oauth/callback?error=server_error');
+      // Don't redirect to error - just continue to normal page
     }
   }
   
