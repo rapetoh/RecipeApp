@@ -32,7 +32,11 @@ export function useOAuth() {
       
       // Open browser for OAuth flow
       // The server will redirect to recipeapp://oauth/callback?jwt=...&user=...
-      const result = await WebBrowser.openAuthSessionAsync(oauthUrl, appCallbackUrl);
+      // Use preferEphemeralSession to ensure a clean session without previous cookies
+      // This prevents linking to an existing session when signing in with a different provider
+      const result = await WebBrowser.openAuthSessionAsync(oauthUrl, appCallbackUrl, {
+        preferEphemeralSession: true,
+      });
       
       console.log('🔐 OAuth result:', result.type);
       
