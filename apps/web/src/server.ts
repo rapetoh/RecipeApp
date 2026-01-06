@@ -297,6 +297,50 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
   }
 });
 
+// INTERCEPT CALLBACK REDIRECTS: Force mobile OAuth parameter
+// Auth.js ignores our callbackUrl, so we intercept the redirect response
+// and add ?mobile_oauth=1 to ensure mobile flows are detected
+app.use('/api/auth/callback/*', async (c, next) => {
+  await next();
+  
+  // Check if Auth.js returned a redirect to /
+  const location = c.res.headers.get('Location');
+  console.log('🔐 Callback response Location header:', location);
+  
+  if (location) {
+    // Check if redirect is to root (with or without domain)
+    const isRootRedirect = location === '/' || 
+                           location.endsWith('.onrender.com/') ||
+                           location.match(/^https?:\/\/[^\/]+\/?$/);
+    
+    if (isRootRedirect) {
+      console.log('🔐 Intercepting root redirect, adding mobile_oauth param');
+      
+      // Modify the redirect to include mobile_oauth parameter
+      let newLocation = location;
+      if (location === '/') {
+        newLocation = '/?mobile_oauth=1';
+      } else if (location.endsWith('/')) {
+        newLocation = location + '?mobile_oauth=1';
+      } else {
+        newLocation = location + '/?mobile_oauth=1';
+      }
+      
+      // Create new response with modified Location header
+      const headers = new Headers(c.res.headers);
+      headers.set('Location', newLocation);
+      
+      c.res = new Response(c.res.body, {
+        status: c.res.status,
+        statusText: c.res.statusText,
+        headers: headers,
+      });
+      
+      console.log('🔐 Modified redirect to:', newLocation);
+    }
+  }
+});
+
 // Register auth routes AFTER custom endpoints
 // This must be registered on the main app, not the api sub-app
 const authMiddleware = authHandler();
