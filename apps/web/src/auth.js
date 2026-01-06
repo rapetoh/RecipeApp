@@ -4,6 +4,77 @@ import Google from '@auth/core/providers/google';
 import Apple from '@auth/core/providers/apple';
 import { hash, verify } from 'argon2';
 import sql from './app/api/utils/sql.js';
+import { SignJWT, importPKCS8 } from 'jose';
+
+// Generate Apple client secret JWT
+// Apple requires a JWT signed with your private key as the client secret
+let appleClientSecret = null;
+let appleClientSecretError = null;
+
+async function generateAppleClientSecret() {
+  try {
+    if (!process.env.APPLE_PRIVATE_KEY || !process.env.APPLE_TEAM_ID || 
+        !process.env.APPLE_CLIENT_ID || !process.env.APPLE_KEY_ID) {
+      console.log('❌ Apple OAuth: Missing required environment variables');
+      return null;
+    }
+
+    // Process the private key - handle both escaped and real newlines
+    let privateKey = process.env.APPLE_PRIVATE_KEY;
+    
+    // If the key has literal \n, replace with actual newlines
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+    
+    // Ensure proper PEM format
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+      console.log('❌ Apple OAuth: Private key missing BEGIN marker');
+      return null;
+    }
+    if (!privateKey.includes('-----END PRIVATE KEY-----')) {
+      console.log('❌ Apple OAuth: Private key missing END marker');
+      return null;
+    }
+
+    console.log('🔍 Apple OAuth: Private key format check passed');
+    console.log('🔍 Apple OAuth: Key length:', privateKey.length);
+
+    // Import the private key
+    const secret = await importPKCS8(privateKey, 'ES256');
+    console.log('✅ Apple OAuth: Private key imported successfully');
+
+    // Generate the JWT client secret
+    const jwt = await new SignJWT({})
+      .setAudience('https://appleid.apple.com')
+      .setIssuer(process.env.APPLE_TEAM_ID)
+      .setIssuedAt()
+      .setExpirationTime('180 days') // Max is 6 months
+      .setSubject(process.env.APPLE_CLIENT_ID)
+      .setProtectedHeader({ alg: 'ES256', kid: process.env.APPLE_KEY_ID })
+      .sign(secret);
+
+    console.log('✅ Apple OAuth: Client secret JWT generated successfully');
+    console.log('🔍 Apple OAuth: JWT preview:', jwt.substring(0, 50) + '...');
+    
+    return jwt;
+  } catch (error) {
+    console.error('❌ Apple OAuth: Failed to generate client secret:', error.message);
+    console.error('❌ Apple OAuth: Error details:', error);
+    appleClientSecretError = error;
+    return null;
+  }
+}
+
+// Generate the client secret at startup
+generateAppleClientSecret().then(secret => {
+  appleClientSecret = secret;
+  if (secret) {
+    console.log('✅ Apple OAuth: Client secret ready for use');
+  } else {
+    console.log('❌ Apple OAuth: Client secret generation failed');
+  }
+});
 
 function Adapter(client) {
   return {
@@ -280,19 +351,25 @@ export const getAuthConfig = () => {
     process.env.APPLE_KEY_ID &&
     process.env.APPLE_PRIVATE_KEY
   ) {
-    console.log('✅ Adding Apple OAuth provider');
-    providers.push(
-      Apple({
-        clientId: process.env.APPLE_CLIENT_ID,
-        teamId: process.env.APPLE_TEAM_ID,
-        keyId: process.env.APPLE_KEY_ID,
-        privateKey: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        // Disable all verification checks for mobile compatibility
-        checks: [],
-        // Allow linking OAuth account to existing email account
-        allowDangerousEmailAccountLinking: true,
-      })
-    );
+    if (appleClientSecret) {
+      console.log('✅ Adding Apple OAuth provider with pre-generated client secret');
+      providers.push(
+        Apple({
+          clientId: process.env.APPLE_CLIENT_ID,
+          // Use our pre-generated JWT client secret instead of private key
+          clientSecret: appleClientSecret,
+          // Disable all verification checks for mobile compatibility
+          checks: [],
+          // Allow linking OAuth account to existing email account
+          allowDangerousEmailAccountLinking: true,
+        })
+      );
+    } else {
+      console.log('❌ Apple OAuth provider NOT added - client secret generation failed');
+      if (appleClientSecretError) {
+        console.log('❌ Error was:', appleClientSecretError.message);
+      }
+    }
   }
 
   console.log(`🔍 Total providers: ${providers.length}`);
