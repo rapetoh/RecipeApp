@@ -356,7 +356,7 @@ export default function SignUpScreen() {
             <Text style={[styles.footerText, { fontFamily: "Inter_400Regular" }]}>
               Already have an account?{" "}
             </Text>
-            <TouchableOpacity onPress={() => router.push("/account/signin")}>
+            <TouchableOpacity onPress={() => router.replace("/account/signin")}>
               <Text style={[styles.footerLink, { fontFamily: "Inter_600SemiBold" }]}>
                 Log In
               </Text>
