@@ -249,7 +249,7 @@ app.get('/api/auth/signin/:provider', (c) => {
 });
 
 // MOBILE TOKEN ENDPOINT: Must be registered BEFORE Auth.js middleware
-// This endpoint returns JWT token after successful OAuth for mobile apps
+// This endpoint redirects to the mobile app with the JWT token in the URL
 app.get('/api/auth/token', verifyAuth(), async (c) => {
   console.log('🔐 Token endpoint accessed');
   try {
@@ -259,7 +259,8 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
     
     if (!authUser) {
       console.log('❌ No authUser in context - session cookie may not have been sent');
-      return c.json({ error: 'Not authenticated - no session found' }, 401);
+      // Redirect to app with error
+      return c.redirect('recipeapp://oauth/callback?error=no_session');
     }
     
     // authUser contains { session, user }
@@ -268,25 +269,27 @@ app.get('/api/auth/token', verifyAuth(), async (c) => {
     console.log('🔐 User:', user ? user.email : 'not found');
     
     if (!session || !user) {
-      return c.json({ error: 'Not authenticated - invalid session' }, 401);
+      return c.redirect('recipeapp://oauth/callback?error=invalid_session');
     }
     
     const sessionAny = session as any;
-    const responseData = {
-      jwt: sessionAny.sessionToken || sessionAny.id,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
-      },
+    const jwt = sessionAny.sessionToken || sessionAny.id;
+    const userData = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
     };
     
-    console.log('✅ Token endpoint returning user:', user.email);
-    return c.json(responseData);
+    console.log('✅ Token endpoint redirecting to app for user:', user.email);
+    
+    // Redirect to mobile app with token and user data in URL
+    // The mobile app scheme is "recipeapp://"
+    const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
+    return c.redirect(redirectUrl);
   } catch (error) {
     console.error('❌ Token endpoint error:', error);
-    return c.json({ error: 'Internal server error' }, 500);
+    return c.redirect('recipeapp://oauth/callback?error=server_error');
   }
 });
 

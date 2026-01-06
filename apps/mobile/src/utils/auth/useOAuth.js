@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useAuth } from './useAuth';
 import { getApiUrl } from '../api';
@@ -17,33 +18,61 @@ export function useOAuth() {
   const signInWithOAuth = useCallback(async (provider) => {
     try {
       const apiUrl = getApiUrl();
+      // The server will redirect to our app scheme with the token
       const callbackUrl = `${apiUrl}/api/auth/token`;
       
+      // The app scheme URL that the server will redirect to
+      const appCallbackUrl = 'recipeapp://oauth/callback';
+      
       // Use custom OAuth endpoint that handles CSRF token and form submission
-      // Auth.js requires POST with CSRF token, this endpoint bridges GET to POST
       const oauthUrl = `${apiUrl}/api/auth/oauth/${provider}?callbackUrl=${encodeURIComponent(callbackUrl)}`;
       
-      // Open browser for OAuth flow
-      const result = await WebBrowser.openAuthSessionAsync(oauthUrl, callbackUrl);
+      console.log('🔐 Starting OAuth flow:', oauthUrl);
+      console.log('🔐 App callback URL:', appCallbackUrl);
       
-      if (result.type === 'success') {
-        // After OAuth callback, fetch the token
-        const response = await fetch(callbackUrl, {
-          credentials: 'include',
+      // Open browser for OAuth flow
+      // The server will redirect to recipeapp://oauth/callback?jwt=...&user=...
+      const result = await WebBrowser.openAuthSessionAsync(oauthUrl, appCallbackUrl);
+      
+      console.log('🔐 OAuth result:', result.type);
+      
+      if (result.type === 'success' && result.url) {
+        console.log('🔐 Received callback URL:', result.url);
+        
+        // Parse the token and user from the redirect URL
+        const url = new URL(result.url);
+        const params = new URLSearchParams(url.search);
+        
+        // Check for errors
+        const error = params.get('error');
+        if (error) {
+          console.error('🔐 OAuth error:', error);
+          throw new Error(`OAuth failed: ${error}`);
+        }
+        
+        // Get token and user data
+        const jwt = params.get('jwt');
+        const userJson = params.get('user');
+        
+        if (!jwt || !userJson) {
+          throw new Error('Missing jwt or user in callback');
+        }
+        
+        const user = JSON.parse(decodeURIComponent(userJson));
+        
+        console.log('🔐 OAuth success for user:', user.email);
+        
+        // Set auth state
+        setAuth({
+          jwt,
+          user,
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          setAuth({
-            jwt: data.jwt,
-            user: data.user,
-          });
-          router.replace('/');
-        } else {
-          throw new Error('Failed to get authentication token');
-        }
+        // Navigate to home
+        router.replace('/');
+      } else if (result.type === 'cancel') {
+        console.log('🔐 OAuth cancelled by user');
       }
-      // If cancelled, do nothing
     } catch (error) {
       console.error(`OAuth signin error (${provider}):`, error);
       throw error;
