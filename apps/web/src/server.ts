@@ -248,14 +248,57 @@ app.get('/api/auth/signin/:provider', (c) => {
   return c.redirect(`/api/auth/oauth/${provider}?callbackUrl=${encodeURIComponent(callbackUrl)}`);
 });
 
+// MOBILE TOKEN ENDPOINT: Must be registered BEFORE Auth.js middleware
+// This endpoint returns JWT token after successful OAuth for mobile apps
+app.get('/api/auth/token', verifyAuth(), async (c) => {
+  console.log('🔐 Token endpoint accessed');
+  try {
+    // Get session from auth context (set by verifyAuth middleware)
+    const authUser = c.get('authUser');
+    console.log('🔐 Auth user from context:', authUser ? 'found' : 'not found');
+    
+    if (!authUser) {
+      console.log('❌ No authUser in context - session cookie may not have been sent');
+      return c.json({ error: 'Not authenticated - no session found' }, 401);
+    }
+    
+    // authUser contains { session, user }
+    const { session, user } = authUser;
+    console.log('🔐 Session:', session ? 'found' : 'not found');
+    console.log('🔐 User:', user ? user.email : 'not found');
+    
+    if (!session || !user) {
+      return c.json({ error: 'Not authenticated - invalid session' }, 401);
+    }
+    
+    const sessionAny = session as any;
+    const responseData = {
+      jwt: sessionAny.sessionToken || sessionAny.id,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+      },
+    };
+    
+    console.log('✅ Token endpoint returning user:', user.email);
+    return c.json(responseData);
+  } catch (error) {
+    console.error('❌ Token endpoint error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
 // Register auth routes AFTER custom endpoints
 // This must be registered on the main app, not the api sub-app
 const authMiddleware = authHandler();
 app.use('/api/auth/*', async (c, next) => {
-  // Skip Auth.js middleware for our custom signin/signup endpoints (already handled above)
+  // Skip Auth.js middleware for our custom endpoints (already handled above)
   const path = c.req.path;
-  if (path === '/api/auth/signin' || path === '/api/auth/signup') {
-    return next(); // Should not reach here, but just in case
+  if (path === '/api/auth/signin' || path === '/api/auth/signup' || path === '/api/auth/token') {
+    console.log('⏭️ Skipping Auth.js middleware for:', path);
+    return next();
   }
   console.log('🔐 Auth route accessed:', c.req.method, c.req.path, 'URL:', c.req.url);
   return authMiddleware(c, next);
@@ -416,32 +459,6 @@ console.log(`📋 Registered routes:`, api.routes.map(r => `${r.method} ${r.path
 app.route('/api', api);
 console.log('✅ Mounted API routes at /api (before createHonoServer mounts React Router)');
 console.log('✅ Auth routes registered at /api/auth/*');
-
-// Add /api/auth/token endpoint for mobile app callback
-// This needs to be after authHandler but before React Router
-// Use verifyAuth to ensure user is authenticated
-app.get('/api/auth/token', verifyAuth(), async (c) => {
-  // Get session from auth context
-  const authUser = c.get('authUser');
-  if (!authUser) {
-    return c.json({ error: 'Not authenticated' }, 401);
-  }
-  // authUser contains { session, user }
-  const { session, user } = authUser;
-  if (!session || !user) {
-    return c.json({ error: 'Not authenticated' }, 401);
-  }
-  const sessionAny = session as any;
-  return c.json({
-    jwt: sessionAny.sessionToken || sessionAny.id,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-    },
-  });
-});
 
 export default await createHonoServer({
   app,
