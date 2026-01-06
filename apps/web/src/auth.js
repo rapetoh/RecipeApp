@@ -255,9 +255,10 @@ export const getAuthConfig = () => {
       Google({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        // Use state verification instead of PKCE for mobile compatibility
-        // PKCE uses cookies which don't persist in mobile embedded browsers
-        checks: ["state"],
+        // Disable all verification checks for mobile compatibility
+        // Both PKCE and state use __Secure- cookies which don't persist
+        // in mobile embedded browsers (expo-web-browser)
+        checks: [],
         authorization: {
           params: {
             prompt: "consent",
@@ -284,8 +285,8 @@ export const getAuthConfig = () => {
         teamId: process.env.APPLE_TEAM_ID,
         keyId: process.env.APPLE_KEY_ID,
         privateKey: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        // Use state verification instead of PKCE for mobile compatibility
-        checks: ["state"],
+        // Disable all verification checks for mobile compatibility
+        checks: [],
       })
     );
   }
