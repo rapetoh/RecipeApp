@@ -154,16 +154,16 @@ app.get('/api/auth/signup', (c) => {
 // This endpoint handles GET requests by auto-submitting a form
 app.get('/api/auth/oauth/:provider', async (c) => {
   const provider = c.req.param('provider');
-  const callbackUrl = c.req.query('callbackUrl') || '/';
   const protocol = 'https';
   const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
   const baseUrl = `${protocol}://${host}`;
   
-  console.log(`🔐 OAuth redirect for provider: ${provider}, callbackUrl: ${callbackUrl}`);
+  // Use a query parameter to track mobile OAuth flows
+  // This is more reliable than cookies which don't persist in mobile browsers
+  // After OAuth completes, Auth.js will redirect to this URL
+  const mobileCallbackUrl = `${baseUrl}/?mobile_oauth=1`;
   
-  // Set a cookie to indicate this is a mobile OAuth flow
-  // This will be used after callback to redirect to the mobile app
-  c.header('Set-Cookie', `__mobile_oauth=1; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=600`);
+  console.log(`🔐 OAuth redirect for provider: ${provider}, mobileCallbackUrl: ${mobileCallbackUrl}`);
   
   // Fetch CSRF token from Auth.js
   try {
@@ -228,7 +228,7 @@ app.get('/api/auth/oauth/:provider', async (c) => {
   </div>
   <form id="oauth-form" action="${baseUrl}/api/auth/signin/${provider}" method="POST" style="display:none;">
     <input type="hidden" name="csrfToken" value="${csrfToken}" />
-    <input type="hidden" name="callbackUrl" value="${callbackUrl}" />
+    <input type="hidden" name="callbackUrl" value="${mobileCallbackUrl}" />
   </form>
   <script>
     document.getElementById('oauth-form').submit();
@@ -312,18 +312,20 @@ app.use('/api/auth/*', async (c, next) => {
 });
 
 // MOBILE OAUTH COMPLETION HANDLER
-// After Auth.js completes OAuth callback, it redirects to "/" 
+// After Auth.js completes OAuth callback, it redirects to "/?mobile_oauth=1" 
 // We intercept this to redirect mobile OAuth flows to the app
 app.get('/', verifyAuth(), async (c, next) => {
-  // Check for mobile OAuth cookie
-  const cookies = c.req.header('Cookie') || '';
-  const isMobileOAuth = cookies.includes('__mobile_oauth=1');
+  // Check for mobile OAuth query parameter (more reliable than cookies)
+  const isMobileOAuth = c.req.query('mobile_oauth') === '1';
+  
+  console.log('🔐 GET / accessed, mobile_oauth param:', c.req.query('mobile_oauth'));
   
   if (isMobileOAuth) {
-    console.log('🔐 Mobile OAuth completion detected at /');
+    console.log('🔐 Mobile OAuth completion detected at /?mobile_oauth=1');
     
     try {
       const authUser = c.get('authUser');
+      console.log('🔐 authUser:', authUser ? 'found' : 'not found');
       
       if (authUser && authUser.session && authUser.user) {
         const { session, user } = authUser;
@@ -338,21 +340,15 @@ app.get('/', verifyAuth(), async (c, next) => {
         
         console.log('✅ Mobile OAuth complete - redirecting to app for user:', user.email);
         
-        // Clear the mobile OAuth cookie
-        c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
-        
         // Redirect to mobile app with token
         const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
         return c.redirect(redirectUrl);
       } else {
         console.log('❌ Mobile OAuth but no session - user not authenticated');
-        // Clear cookie and continue to normal page
-        c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
         return c.redirect('recipeapp://oauth/callback?error=no_session');
       }
     } catch (error) {
       console.error('❌ Mobile OAuth completion error:', error);
-      c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
       return c.redirect('recipeapp://oauth/callback?error=server_error');
     }
   }
