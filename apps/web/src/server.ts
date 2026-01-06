@@ -161,6 +161,10 @@ app.get('/api/auth/oauth/:provider', async (c) => {
   
   console.log(`🔐 OAuth redirect for provider: ${provider}, callbackUrl: ${callbackUrl}`);
   
+  // Set a cookie to indicate this is a mobile OAuth flow
+  // This will be used after callback to redirect to the mobile app
+  c.header('Set-Cookie', `__mobile_oauth=1; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=600`);
+  
   // Fetch CSRF token from Auth.js
   try {
     const csrfResponse = await fetch(`${baseUrl}/api/auth/csrf`, {
@@ -305,6 +309,56 @@ app.use('/api/auth/*', async (c, next) => {
   }
   console.log('🔐 Auth route accessed:', c.req.method, c.req.path, 'URL:', c.req.url);
   return authMiddleware(c, next);
+});
+
+// MOBILE OAUTH COMPLETION HANDLER
+// After Auth.js completes OAuth callback, it redirects to "/" 
+// We intercept this to redirect mobile OAuth flows to the app
+app.get('/', verifyAuth(), async (c, next) => {
+  // Check for mobile OAuth cookie
+  const cookies = c.req.header('Cookie') || '';
+  const isMobileOAuth = cookies.includes('__mobile_oauth=1');
+  
+  if (isMobileOAuth) {
+    console.log('🔐 Mobile OAuth completion detected at /');
+    
+    try {
+      const authUser = c.get('authUser');
+      
+      if (authUser && authUser.session && authUser.user) {
+        const { session, user } = authUser;
+        const sessionAny = session as any;
+        const jwt = sessionAny.sessionToken || sessionAny.id;
+        const userData = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+        };
+        
+        console.log('✅ Mobile OAuth complete - redirecting to app for user:', user.email);
+        
+        // Clear the mobile OAuth cookie
+        c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
+        
+        // Redirect to mobile app with token
+        const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
+        return c.redirect(redirectUrl);
+      } else {
+        console.log('❌ Mobile OAuth but no session - user not authenticated');
+        // Clear cookie and continue to normal page
+        c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
+        return c.redirect('recipeapp://oauth/callback?error=no_session');
+      }
+    } catch (error) {
+      console.error('❌ Mobile OAuth completion error:', error);
+      c.header('Set-Cookie', '__mobile_oauth=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
+      return c.redirect('recipeapp://oauth/callback?error=server_error');
+    }
+  }
+  
+  // Not a mobile OAuth flow - continue to normal handling
+  return next();
 });
 
 // Helper to transform file path to Hono route path
