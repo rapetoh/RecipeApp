@@ -150,13 +150,23 @@ export async function POST(request) {
         RETURNING *
       `;
 
-      // Add to Favorites collection
+      // Add to Favorites collection (auto-create if missing)
       try {
-        const favoritesCollection = await sql`
+        let favoritesCollection = await sql`
           SELECT id FROM recipe_collections
           WHERE user_id = ${userId}::uuid AND system_type = 'favorites'
           LIMIT 1
         `;
+        
+        // Auto-create "Favorites" collection if it doesn't exist
+        if (favoritesCollection.length === 0) {
+          const newCollection = await sql`
+            INSERT INTO recipe_collections (user_id, name, collection_type, system_type, created_at)
+            VALUES (${userId}::uuid, 'Favorites', 'system', 'favorites', NOW())
+            RETURNING id
+          `;
+          favoritesCollection = newCollection;
+        }
         
         if (favoritesCollection.length > 0) {
           await sql`

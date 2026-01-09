@@ -239,13 +239,23 @@ export async function POST(request) {
     // Add recipe to collections
     const collectionsToAdd = Array.isArray(collectionIds) ? collectionIds : [];
     
-    // Always add to "My Creations" system collection
-    const myCreationsCollection = await sql`
+    // Always add to "My Creations" system collection (auto-create if missing)
+    let myCreationsCollection = await sql`
       SELECT id FROM recipe_collections
       WHERE user_id = ${userId}::uuid
       AND system_type = 'my_creations'
       LIMIT 1
     `;
+    
+    // Auto-create "My Creations" collection if it doesn't exist
+    if (myCreationsCollection.length === 0) {
+      const newCollection = await sql`
+        INSERT INTO recipe_collections (user_id, name, collection_type, system_type, created_at)
+        VALUES (${userId}::uuid, 'My Creations', 'system', 'my_creations', NOW())
+        RETURNING id
+      `;
+      myCreationsCollection = newCollection;
+    }
     
     if (myCreationsCollection.length > 0) {
       const myCreationsId = myCreationsCollection[0].id;

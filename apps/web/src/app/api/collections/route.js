@@ -59,6 +59,36 @@ async function getUserId(request) {
   return searchParams.get("userId");
 }
 
+// Helper to ensure all 3 system collections exist for a user
+async function ensureSystemCollections(userId) {
+  const systemCollections = [
+    { name: 'Favorites', system_type: 'favorites' },
+    { name: 'My Creations', system_type: 'my_creations' },
+    { name: 'Generated', system_type: 'generated' }
+  ];
+
+  for (const collection of systemCollections) {
+    try {
+      const existing = await sql`
+        SELECT id FROM recipe_collections
+        WHERE user_id = ${userId}::uuid AND system_type = ${collection.system_type}
+        LIMIT 1
+      `;
+
+      if (existing.length === 0) {
+        await sql`
+          INSERT INTO recipe_collections (user_id, name, collection_type, system_type, created_at)
+          VALUES (${userId}::uuid, ${collection.name}, 'system', ${collection.system_type}, NOW())
+          ON CONFLICT (user_id, system_type) DO NOTHING
+        `;
+      }
+    } catch (error) {
+      console.error(`Error ensuring ${collection.system_type} collection:`, error);
+      // Continue with other collections even if one fails
+    }
+  }
+}
+
 // GET /api/collections - Get user's collections
 export async function GET(request) {
   try {
@@ -69,6 +99,9 @@ export async function GET(request) {
         { status: 401 }
       );
     }
+
+    // Ensure all 3 system collections exist (lazy creation for new users)
+    await ensureSystemCollections(userId);
 
     const collections = await sql`
       SELECT 
