@@ -543,15 +543,6 @@ export default function RecipeDetailScreen() {
             {recipe.name}
           </Text>
 
-          {/* AI-Generated Badge */}
-          {recipe.creator_type === "ai" && (
-            <View style={styles.aiBadge}>
-              <Text style={[styles.aiBadgeText, { fontFamily: "Inter_500Medium" }]}>
-                AI-Generated
-              </Text>
-            </View>
-          )}
-
           {/* Author Line */}
           <Text style={[styles.authorText, { fontFamily: "Inter_400Regular" }]}>
             {recipe.cuisine} cuisine
