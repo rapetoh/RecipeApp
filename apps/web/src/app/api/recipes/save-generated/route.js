@@ -241,11 +241,21 @@ export async function POST(request) {
     `;
     
     if (recipeCheck.length > 0 && recipeCheck[0].creator_type === 'ai') {
-      const generatedCollection = await sql`
+      let generatedCollection = await sql`
         SELECT id FROM recipe_collections
         WHERE user_id = ${userId}::uuid AND system_type = 'generated'
         LIMIT 1
       `;
+      
+      // Auto-create "Generated" collection if it doesn't exist
+      if (generatedCollection.length === 0) {
+        const newCollection = await sql`
+          INSERT INTO recipe_collections (user_id, name, collection_type, system_type, created_at)
+          VALUES (${userId}::uuid, 'Generated', 'system', 'generated', NOW())
+          RETURNING id
+        `;
+        generatedCollection = newCollection;
+      }
       
       if (generatedCollection.length > 0) {
         await sql`

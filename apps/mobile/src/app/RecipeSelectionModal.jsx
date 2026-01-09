@@ -23,6 +23,7 @@ import {
   Moon,
 } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/utils/auth/useAuth";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -36,6 +37,7 @@ export function RecipeSelectionModal({
   isAuthenticated,
 }) {
   const insets = useSafeAreaInsets();
+  const { auth } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
@@ -48,23 +50,42 @@ export function RecipeSelectionModal({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch recipes
+  // Fetch recipes from user's collections (same as My Recipes page)
   const { data: recipes, isLoading } = useQuery({
-    queryKey: ["recipes-search", debouncedSearchQuery],
+    queryKey: ["my-collections-recipes", auth?.user?.id, debouncedSearchQuery],
     queryFn: async () => {
+      if (!auth?.user?.id) {
+        throw new Error("User not authenticated");
+      }
+
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
       const params = new URLSearchParams({
         limit: "20",
         ...(debouncedSearchQuery && { search: debouncedSearchQuery }),
       });
 
-      const response = await fetch(`${apiUrl}/api/recipes?${params}`);
+      // Use my-collections endpoint to get all recipes from user's collections
+      const response = await fetch(`${apiUrl}/api/recipes/my-collections?userId=${auth.user.id}&${params}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
+        },
+        credentials: 'include',
+      });
+
       if (!response.ok) {
         throw new Error("Failed to fetch recipes");
       }
-      return response.json();
+      
+      const result = await response.json();
+      // Transform response to match expected format
+      return {
+        success: result.success,
+        data: result.data?.recipes || [],
+        total: result.data?.total || 0,
+      };
     },
-    enabled: visible && isAuthenticated,
+    enabled: visible && isAuthenticated && !!auth?.user?.id,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 

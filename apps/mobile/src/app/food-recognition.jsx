@@ -44,7 +44,7 @@ import {
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpload } from "@/utils/useUpload";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
@@ -54,6 +54,7 @@ export default function FoodRecognitionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { auth } = useAuth();
+  const queryClient = useQueryClient();
   const [upload, { loading: uploadLoading }] = useUpload();
 
   // Mode state (scan vs search)
@@ -401,6 +402,10 @@ export default function FoodRecognitionScreen() {
         setIsSavingRecipe(false);
         setShowCollectionModal(false);
         setSelectedCollectionIds([]);
+        
+        // Invalidate collections cache to refresh MyRecipe page
+        queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+        
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }

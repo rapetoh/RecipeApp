@@ -166,21 +166,29 @@ export async function POST(request) {
 
     console.log("Parsed analysis:", analysisJson);
 
-    // Check if we have similar recipes in our database first
-    const similarRecipes = await sql`
-      SELECT id, name, average_rating, cooking_time, cuisine, difficulty, description, image_url, ingredients, instructions, nutrition
-      FROM recipes 
-      WHERE (
-        LOWER(name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
-        LOWER(description) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
-        LOWER(cuisine) = LOWER(${analysisJson.cuisine})
-      )
-      AND average_rating >= 4.0
-      ORDER BY 
-        CASE WHEN LOWER(name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) THEN 1 ELSE 2 END,
-        average_rating DESC
-      LIMIT 5
-    `;
+    // Check if we have similar recipes in user's collections (privacy fix)
+    // Only show recipes from user's collections (same as My Recipes page)
+    const similarRecipes = userId 
+      ? await sql`
+          SELECT DISTINCT
+            r.id, r.name, r.average_rating, r.cooking_time, r.cuisine, r.difficulty, 
+            r.description, r.image_url, r.ingredients, r.instructions, r.nutrition
+          FROM collection_recipes cr
+          JOIN recipe_collections rc ON cr.collection_id = rc.id
+          JOIN recipes r ON cr.recipe_id = r.id
+          WHERE rc.user_id = ${userId}::uuid
+          AND (
+            LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
+            LOWER(r.description) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
+            LOWER(r.cuisine) = LOWER(${analysisJson.cuisine})
+          )
+          AND r.average_rating >= 4.0
+          ORDER BY 
+            CASE WHEN LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) THEN 1 ELSE 2 END,
+            r.average_rating DESC
+          LIMIT 5
+        `
+      : []; // If no userId, return empty array (don't show any similar recipes)
 
     let generatedRecipe = null;
     let useExistingRecipe = false;

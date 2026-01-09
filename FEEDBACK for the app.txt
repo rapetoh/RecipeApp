@@ -1,0 +1,15 @@
+1 - When I want to add a recipe/food to some days in the Meal planning page, it is pulling up many recipes I never seen since I am logged into my account. (Looks like it is showing me all recipes in the database. Other users recipes too. Which I think shouldn't happen) . Let me know if I am wrong or if I am maybe just tripping.I mean again I am just a tester but you would let me know how things should be or if that is normal or not.
+
+
+2 - When we generate a recipe with the photo or camera feature, we have a section for "similar recipes" which is fine but it looks like it is showing other users recipes as similar recipes which I think is not a good thing. I mean again I am just a tester but you would let me know how things should be or if that is normal or not
+
+3 - I noticed that when I talk to the app through the Voice input feature, he will get me some result/recipes propositions. However, when I choose one of them, get to that recipe page, and then hit Start cooking, the app crashes, and auto-closes. The same thing is happening after I generate a food with the AI name search and or the Photo recognition...
+
+4 - What are all the information taken in consideration by the vibe/voice input recipe generator ? Im curious and I am wondering and even guessing he is not taking in consideration all info he has to. Ex: current time. But this is just an example. There might be some other info that it doesn't consider and that I just didn't notice.
+
+5 - Again with the voice input/vibe generator, when I finish talking and the bot generate me foods suggestions, there is a button there called View Planner. I don't know what it serves and it feels useless.... When I click it, it just bring me back to the home page. Could we replace it with something else that will be more useful for this app ? Otherwise delete it ?
+
+6  - Again with the voice input/vibe generator, when I finish talking and the bot gives me some suggestions, when I clik on save the recipe, it says, okay it is saved successfully but when I go to MyRecipe page, nthing there. The same thing is happenig when I generate the recipe with the Ai name search or even the AI photo recognition.
+
+7 - Could we have a light, dark, and system mode in the app ? It needs to be well implemented though. You may ask a designer to help you out. 
+

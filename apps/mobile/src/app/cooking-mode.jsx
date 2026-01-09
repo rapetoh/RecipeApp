@@ -36,6 +36,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { IngredientIcon } from "@/components/IngredientIcon";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -64,6 +65,75 @@ export default function CookingModeScreen() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // Helper functions to parse and normalize ingredients and instructions
+  // These handle JSONB strings from database and various data structures
+  const parseIngredients = (ingredientsData) => {
+    if (!ingredientsData) return [];
+    
+    // Handle JSON string (from database JSONB)
+    if (typeof ingredientsData === 'string') {
+      try {
+        ingredientsData = JSON.parse(ingredientsData);
+      } catch (e) {
+        console.error('Failed to parse ingredients JSON:', e);
+        return [];
+      }
+    }
+    
+    // Ensure it's an array
+    if (!Array.isArray(ingredientsData)) {
+      return [];
+    }
+    
+    // Normalize structure - handle various formats
+    return ingredientsData.map(ing => {
+      // If it's a string, convert to object
+      if (typeof ing === 'string') {
+        return { name: ing, amount: '', unit: '' };
+      }
+      
+      // Handle object format - support multiple field name variations
+      return {
+        name: ing.name || ing.ingredient || '',
+        amount: ing.amount || '',
+        unit: ing.unit || ''
+      };
+    });
+  };
+
+  const parseInstructions = (instructionsData) => {
+    if (!instructionsData) return [];
+    
+    // Handle JSON string (from database JSONB)
+    if (typeof instructionsData === 'string') {
+      try {
+        instructionsData = JSON.parse(instructionsData);
+      } catch (e) {
+        console.error('Failed to parse instructions JSON:', e);
+        return [];
+      }
+    }
+    
+    // Ensure it's an array
+    if (!Array.isArray(instructionsData)) {
+      return [];
+    }
+    
+    // Normalize structure - handle both {step: X, instruction: "..."} and {instruction: "..."}
+    return instructionsData.map((inst, index) => {
+      // If it's a string, convert to object
+      if (typeof inst === 'string') {
+        return { instruction: inst, step: index + 1 };
+      }
+      
+      // Handle object format - support multiple field name variations
+      return {
+        instruction: inst.instruction || inst.step || '',
+        step: inst.step || index + 1
+      };
+    });
+  };
 
   // Fetch recipe details
   const { data: recipeData, isLoading } = useQuery({
@@ -157,9 +227,11 @@ export default function CookingModeScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    const instructions = recipeData?.data?.instructions || [];
-    if (currentStep < instructions.length - 1) {
-      setCurrentStep((prev) => prev + 1);
+    if (recipeData?.data) {
+      const tempInstructions = parseInstructions(recipeData.data.instructions);
+      if (currentStep < tempInstructions.length - 1) {
+        setCurrentStep((prev) => prev + 1);
+      }
     }
   };
 
@@ -244,8 +316,9 @@ export default function CookingModeScreen() {
     );
   }
 
-  const ingredients = recipe.ingredients || [];
-  const instructions = recipe.instructions || [];
+  // Parse and normalize ingredients and instructions
+  const ingredients = parseIngredients(recipe.ingredients);
+  const instructions = parseInstructions(recipe.instructions);
   const allStepsCompleted = completedSteps.length === instructions.length;
   const allIngredientsChecked =
     checkedIngredients.length === ingredients.length;
@@ -342,15 +415,24 @@ export default function CookingModeScreen() {
                   )}
                 </View>
                 {(() => {
-                  const iconData = getIngredientIcon(ingredient);
-                  return (
-                    <Image
-                      source={{ uri: iconData.imageUrl }}
-                      style={styles.ingredientImage}
-                      contentFit="cover"
-                      defaultSource={{ uri: iconData.fallbackUrl }}
-                    />
-                  );
+                  try {
+                    const iconData = getIngredientIcon(ingredient);
+                    return (
+                      <Image
+                        source={{ uri: iconData.imageUrl }}
+                        style={styles.ingredientImage}
+                        contentFit="cover"
+                        defaultSource={{ uri: iconData.fallbackUrl }}
+                      />
+                    );
+                  } catch (error) {
+                    // Fallback if getIngredientIcon fails
+                    return (
+                      <View style={[styles.ingredientImage, { backgroundColor: "#F0F0F0", justifyContent: "center", alignItems: "center" }]}>
+                        <ChefHat size={24} color="#CCCCCC" />
+                      </View>
+                    );
+                  }
                 })()}
                 <View style={styles.ingredientInfo}>
                   <Text
@@ -525,7 +607,7 @@ export default function CookingModeScreen() {
               { fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            {currentInstruction?.instruction || currentInstruction?.step || ""}
+            {currentInstruction?.instruction || ""}
           </Text>
           {/* Quick Timer Buttons */}
           <View style={styles.quickTimers}>
@@ -608,7 +690,7 @@ export default function CookingModeScreen() {
                     styles.stepOverviewTextCompleted,
                 ]}
               >
-                {instruction.instruction || instruction.step || ""}
+                {instruction.instruction || ""}
               </Text>
             </TouchableOpacity>
           ))}

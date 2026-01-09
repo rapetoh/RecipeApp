@@ -26,7 +26,7 @@ import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
 import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder } from "lucide-react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
@@ -38,6 +38,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { auth } = useAuth();
+  const queryClient = useQueryClient();
   const bottomSheetRef = useRef(null);
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -536,6 +537,10 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setShowCollectionModal(false);
         setSelectedRecipe(null);
         setSelectedCollectionIds([]);
+        
+        // Invalidate collections cache to refresh MyRecipe page
+        queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+        
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -916,7 +921,16 @@ export default function VoiceSuggestions({ visible, onClose }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.viewPlannerButton}
-                onPress={handleCloseButton}
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }
+                  handleCloseButton(); // Close the modal first
+                  // Navigate to meal planning page
+                  setTimeout(() => {
+                    router.push('/meal-planning');
+                  }, 300); // Small delay to ensure modal closes smoothly
+                }}
               >
                 <Text
                   style={[
