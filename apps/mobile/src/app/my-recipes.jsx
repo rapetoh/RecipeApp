@@ -46,12 +46,16 @@ import { useAuth, useRequireAuth } from "@/utils/auth/useAuth";
 
 // Collection Item Component
 function CollectionItem({ collection, isExpanded, onToggle, onDelete, onViewRecipe, apiUrl, auth, formatTime }) {
-  const [recipes, setRecipes] = useState([]);
-  const [loadingRecipes, setLoadingRecipes] = useState(false);
+  const queryClient = useQueryClient();
 
-  const loadRecipes = useCallback(async () => {
-    setLoadingRecipes(true);
-    try {
+  // Use React Query for collection recipes so cache invalidation works
+  const {
+    data: collectionData,
+    isLoading: loadingRecipes,
+    refetch: refetchRecipes,
+  } = useQuery({
+    queryKey: ["collection-recipes", collection.id, auth?.user?.id],
+    queryFn: async () => {
       const response = await fetch(`${apiUrl}/api/collections/${collection.id}?userId=${auth?.user?.id}`, {
         headers: {
           'Content-Type': 'application/json',
@@ -59,22 +63,17 @@ function CollectionItem({ collection, isExpanded, onToggle, onDelete, onViewReci
         },
         credentials: 'include',
       });
-      if (response.ok) {
-        const result = await response.json();
-        setRecipes(result.data?.recipes || []);
+      if (!response.ok) {
+        throw new Error("Failed to fetch collection recipes");
       }
-    } catch (error) {
-      console.error("Error loading collection recipes:", error);
-    } finally {
-      setLoadingRecipes(false);
-    }
-  }, [apiUrl, auth?.user?.id, auth?.jwt, collection.id]);
+      const result = await response.json();
+      return result;
+    },
+    enabled: isExpanded && !!auth?.user?.id,
+    staleTime: 30 * 1000,
+  });
 
-  useEffect(() => {
-    if (isExpanded && recipes.length === 0) {
-      loadRecipes();
-    }
-  }, [isExpanded, loadRecipes, recipes.length]);
+  const recipes = collectionData?.data?.recipes || [];
 
   const getCollectionIcon = () => {
     if (collection.system_type === 'favorites') return <Heart size={20} color="#10B981" />;
@@ -261,7 +260,7 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["collections"]);
+      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
       setShowCreateCollectionModal(false);
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -292,7 +291,9 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["collections"]);
+      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+      // Also invalidate all collection recipe queries
+      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }

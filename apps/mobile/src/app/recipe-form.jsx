@@ -278,6 +278,9 @@ export default function RecipeFormScreen() {
       }
       // Invalidate caches
       queryClient.invalidateQueries(["userRecipes"]);
+      // Invalidate collections to update My Creations collection and recipe list
+      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
       if (isEditing && edit) {
         queryClient.invalidateQueries(["recipe", edit]);
         queryClient.invalidateQueries(["userRecipe", edit]);

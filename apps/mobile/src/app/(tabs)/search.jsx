@@ -365,7 +365,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["collections"]);
+      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
