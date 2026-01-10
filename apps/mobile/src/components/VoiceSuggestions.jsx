@@ -12,6 +12,7 @@ import {
   Dimensions,
   Modal,
   KeyboardAvoidingView,
+  AppState,
 } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -95,6 +96,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
           recordingAttemptedRef.current = false;
           return;
         }
+
+        // Wait for app to be in foreground after permission dialog
+        // Permission dialog puts app in background, need to wait for it to return
+        let attempts = 0;
+        while (AppState.currentState !== 'active' && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        // Additional small delay to ensure audio session can activate
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
 
       await Audio.setAudioModeAsync({
@@ -115,6 +127,15 @@ export default function VoiceSuggestions({ visible, onClose }) {
       // Reset flag so user can try again
       recordingAttemptedRef.current = false;
       setIsRecording(false);
+      
+      // Don't show error if it's the background audio session error on first permission
+      // User can still use the feature after permission is granted
+      if (err.message && err.message.includes("background") && err.message.includes("audio session")) {
+        // Silently handle - permission was granted, just timing issue
+        console.log("⚠️ [DEBUG] Background audio session error (first permission), will work on retry");
+        return;
+      }
+      
       Alert.alert(
         "Recording Error",
         `Failed to start recording: ${err.message}. You can use the quick suggestions below or try again.`,

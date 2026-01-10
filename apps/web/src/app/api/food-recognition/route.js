@@ -170,19 +170,23 @@ export async function POST(request) {
     // Only show recipes from user's collections (same as My Recipes page)
     const similarRecipes = userId 
       ? await sql`
-          SELECT DISTINCT
+          SELECT 
             r.id, r.name, r.average_rating, r.cooking_time, r.cuisine, r.difficulty, 
             r.description, r.image_url, r.ingredients, r.instructions, r.nutrition
-          FROM collection_recipes cr
-          JOIN recipe_collections rc ON cr.collection_id = rc.id
-          JOIN recipes r ON cr.recipe_id = r.id
-          WHERE rc.user_id = ${userId}::uuid
-          AND (
-            LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
-            LOWER(r.description) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
-            LOWER(r.cuisine) = LOWER(${analysisJson.cuisine})
-          )
-          AND r.average_rating >= 4.0
+          FROM (
+            SELECT DISTINCT r.id
+            FROM collection_recipes cr
+            JOIN recipe_collections rc ON cr.collection_id = rc.id
+            JOIN recipes r ON cr.recipe_id = r.id
+            WHERE rc.user_id = ${userId}::uuid
+            AND (
+              LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
+              LOWER(r.description) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
+              LOWER(r.cuisine) = LOWER(${analysisJson.cuisine})
+            )
+            AND r.average_rating >= 4.0
+          ) unique_recipes
+          JOIN recipes r ON unique_recipes.id = r.id
           ORDER BY 
             CASE WHEN LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) THEN 1 ELSE 2 END,
             r.average_rating DESC

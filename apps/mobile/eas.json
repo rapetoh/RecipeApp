@@ -24,7 +24,7 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://recipe-app-web-xtnu.onrender.com",
         "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dui3u9g4j",
-        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "recipe_upload_preset"
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "recipe_upload_preset",
       }
     }
   },

@@ -405,6 +405,7 @@ export default function FoodRecognitionScreen() {
         
         // Invalidate collections cache to refresh MyRecipe page
         queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+        queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
         
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
