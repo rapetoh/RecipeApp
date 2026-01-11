@@ -6,7 +6,12 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://100.111.160.80:5173",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dui3u9g4j",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "recipe_upload_preset"
+      }
     },
     "preview": {
       "distribution": "internal"
