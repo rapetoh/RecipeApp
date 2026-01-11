@@ -221,7 +221,7 @@ export default function MyRecipesScreen() {
       const result = await response.json();
       return result;
     },
-    staleTime: 30 * 1000,
+    staleTime: 0, // Always refetch when invalidated to ensure immediate updates
     enabled: isAuthenticated && !!auth?.user?.id,
   });
 
@@ -260,7 +260,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       setShowCreateCollectionModal(false);
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -291,9 +292,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
-      // Also invalidate all collection recipe queries
-      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }

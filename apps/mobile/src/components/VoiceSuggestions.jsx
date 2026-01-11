@@ -559,8 +559,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setSelectedRecipe(null);
         setSelectedCollectionIds([]);
         
-        // Invalidate collections cache to refresh MyRecipe page
-        queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
+        // Refetch collections cache to refresh MyRecipe page immediately
+        queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+        queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
         
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

@@ -291,8 +291,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       setShowCreateCollectionModal(false);
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -323,8 +323,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -367,8 +367,8 @@ export default function MyRecipesScreen() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }

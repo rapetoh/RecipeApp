@@ -120,10 +120,20 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = params;
+    const recipeId = parseInt(id);
 
+    // Get all collections this recipe is in BEFORE deleting
+    // (CASCADE will delete collection_recipes, but we need to update recipe_count)
+    const affectedCollections = await sql`
+      SELECT DISTINCT collection_id 
+      FROM collection_recipes 
+      WHERE recipe_id = ${recipeId}
+    `;
+
+    // Delete the recipe (CASCADE will automatically delete from collection_recipes)
     const result = await sql`
       DELETE FROM recipes 
-      WHERE id = ${parseInt(id)}
+      WHERE id = ${recipeId}
       RETURNING id
     `;
 
@@ -132,6 +142,18 @@ export async function DELETE(request, { params }) {
         { success: false, error: "Recipe not found" },
         { status: 404 },
       );
+    }
+
+    // Update recipe_count for all affected collections
+    for (const row of affectedCollections) {
+      const collectionId = row.collection_id;
+      await sql`
+        UPDATE recipe_collections
+        SET recipe_count = (
+          SELECT COUNT(*) FROM collection_recipes WHERE collection_id = ${collectionId}
+        )
+        WHERE id = ${collectionId}
+      `;
     }
 
     return Response.json({

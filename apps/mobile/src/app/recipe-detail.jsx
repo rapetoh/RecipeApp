@@ -206,9 +206,9 @@ export default function RecipeDetailScreen() {
       setIsFavorited(action === "save");
       queryClient.invalidateQueries(["recipe-favorites"]);
       queryClient.invalidateQueries({ queryKey: ["recipe", id] });
-      // Invalidate collections to update Favorites collection count and recipe list
-      queryClient.invalidateQueries({ queryKey: ["collections", auth?.user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["collection-recipes"] });
+      // Refetch collections to update Favorites collection count and recipe list immediately
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
