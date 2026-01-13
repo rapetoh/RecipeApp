@@ -37,6 +37,7 @@ import {
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 import * as Haptics from "expo-haptics";
 
 export default function MealPlanHistoryScreen() {
@@ -147,7 +148,7 @@ export default function MealPlanHistoryScreen() {
       if (!auth?.user?.id) return { data: [] };
 
       try {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const apiUrl = getApiUrl();
         // Fetch ALL meal plans for the user (no date restrictions)
         const response = await fetch(
           `${apiUrl}/api/meal-plans?userId=${auth.user.id}`
@@ -242,7 +243,7 @@ export default function MealPlanHistoryScreen() {
   // Copy meal plan mutation
   const copyMealPlanMutation = useMutation({
     mutationFn: async ({ weekId, targetStartDate }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const period = historicalPeriods?.data?.find((w) => w.id === weekId);
       
       if (!period) {

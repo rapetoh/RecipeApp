@@ -24,6 +24,7 @@ import {
 } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -58,7 +59,7 @@ export function RecipeSelectionModal({
         throw new Error("User not authenticated");
       }
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const params = new URLSearchParams({
         limit: "20",
         ...(debouncedSearchQuery && { search: debouncedSearchQuery }),

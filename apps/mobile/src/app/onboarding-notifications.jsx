@@ -30,6 +30,7 @@ import { useAuth } from "@/utils/auth/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
+import { getApiUrl } from "@/config/api";
 
 export default function OnboardingNotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -135,7 +136,7 @@ export default function OnboardingNotificationsScreen() {
 
       console.log("Saving preferences:", preferences);
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/preferences`, {
         method: "POST",
         headers: {

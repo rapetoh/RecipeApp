@@ -27,9 +27,7 @@ import {
   ChefHat,
   LogOut,
   Star,
-  Calendar,
   ShoppingCart,
-  DollarSign,
   Edit,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
@@ -109,6 +107,9 @@ export default function ProfileScreen() {
       case "saved":
         router.push("/(tabs)/save");
         break;
+      case "ingredients-to-recipes":
+        router.push("/ingredients-to-recipes");
+        break;
       case "food-recognition":
         router.push("/food-recognition");
         break;
@@ -118,14 +119,8 @@ export default function ProfileScreen() {
       case "settings":
         router.push("/preferences");
         break;
-      case "meal-plan-history":
-        router.push("/meal-plan-history");
-        break;
       case "grocery-lists":
         router.push("/grocery-lists");
-        break;
-      case "food-budget":
-        router.push("/food-budget");
         break;
       default:
         Alert.alert("Coming Soon", "This feature is coming soon!");
@@ -154,6 +149,14 @@ export default function ProfileScreen() {
       requiresAuth: true,
     },
     {
+      id: "ingredients-to-recipes",
+      title: "Cook with Ingredients",
+      subtitle: "Photo your ingredients, get recipes",
+      icon: ChefHat,
+      color: "#0EA5E9",
+      requiresAuth: true,
+    },
+    {
       id: "food-recognition",
       title: "Food Recognition",
       subtitle: "Scan food for recipes",
@@ -170,27 +173,11 @@ export default function ProfileScreen() {
       requiresAuth: true,
     },
     {
-      id: "meal-plan-history",
-      title: "Meal Plan History",
-      subtitle: "View past meal plans",
-      icon: Calendar,
-      color: "#FF9F1C",
-      requiresAuth: true,
-    },
-    {
       id: "grocery-lists",
       title: "Grocery Lists",
       subtitle: "Manage your shopping lists",
       icon: ShoppingCart,
       color: "#22C55E",
-      requiresAuth: true,
-    },
-    {
-      id: "food-budget",
-      title: "Food Budget",
-      subtitle: "Track your spending",
-      icon: DollarSign,
-      color: "#F59E0B",
       requiresAuth: true,
     },
     {

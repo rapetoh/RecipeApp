@@ -27,6 +27,7 @@ import {
 } from "@expo-google-fonts/inter";
 import {
   ChevronLeft,
+  ChevronRight,
   Camera,
   ImageIcon,
   Search,
@@ -68,6 +69,9 @@ export default function FoodRecognitionScreen() {
   const [isSavingRecipe, setIsSavingRecipe] = useState(false); // Track saving state
   const [showCollectionModal, setShowCollectionModal] = useState(false); // Collection selection modal
   const [selectedCollectionIds, setSelectedCollectionIds] = useState([]); // Selected collections for Keep Recipe
+  const [searchResultType, setSearchResultType] = useState(null); // "recipe", "suggestions", or "invalid"
+  const [suggestions, setSuggestions] = useState([]); // Array of recipe suggestions
+  const [invalidMessage, setInvalidMessage] = useState(""); // Error message for invalid input
 
   // Animation refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -114,6 +118,12 @@ export default function FoodRecognitionScreen() {
 
       const data = await response.json();
 
+      // Handle 400 (low confidence) as a valid response, not an error
+      // This allows onSuccess to handle it and show the error card without Expo error notification
+      if (response.status === 400 && data.type === "low_confidence") {
+        return data;
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to analyze image");
       }
@@ -121,10 +131,30 @@ export default function FoodRecognitionScreen() {
       return data;
     },
     onSuccess: (data) => {
+      // Reset previous states
+      setRecognitionResult(null);
+      setSearchResultType(null);
+      setSuggestions([]);
+      setInvalidMessage("");
+      setSavedRecipeId(null);
+      setIsSavingRecipe(false);
+
+      if (!data.success) {
+        // Handle low confidence error
+        if (data.type === "low_confidence") {
+          setSearchResultType("invalid");
+          setInvalidMessage(data.error || "We're not confident enough about what's in this image. Please try a clearer photo of a dish.");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        throw new Error(data.error || "Failed to analyze image");
+      }
+
       if (data.success && data.data) {
+        setSearchResultType("recipe");
         setRecognitionResult(data.data);
-        setSavedRecipeId(null); // Reset saved state for new result
-        setIsSavingRecipe(false);
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
@@ -134,10 +164,11 @@ export default function FoodRecognitionScreen() {
     },
     onError: (error) => {
       console.error("Recognition error:", error);
-      Alert.alert(
-        "Analysis Failed",
-        "Failed to analyze the image. Please try again."
-      );
+      setSearchResultType("invalid");
+      setInvalidMessage(error.message || "Failed to analyze the image. Please try again.");
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     },
   });
 
@@ -156,6 +187,12 @@ export default function FoodRecognitionScreen() {
 
       const data = await response.json();
 
+      // Handle 400 (invalid input) as a valid response, not an error
+      // This allows onSuccess to handle it and show the error card without Expo error notification
+      if (response.status === 400 && data.type === "invalid") {
+        return data;
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to find recipe");
       }
@@ -163,9 +200,47 @@ export default function FoodRecognitionScreen() {
       return data;
     },
     onSuccess: (data) => {
-      if (data.success && data.data && data.data.recipe) {
-        // Convert the response to match recognition result format for consistent UI
+      // Reset previous states
+      setRecognitionResult(null);
+      setSearchResultType(null);
+      setSuggestions([]);
+      setInvalidMessage("");
+      setSavedRecipeId(null);
+      setIsSavingRecipe(false);
+
+      if (!data.success) {
+        // Handle invalid input
+        if (data.type === "invalid") {
+          setSearchResultType("invalid");
+          setInvalidMessage(data.error || "Oops, this doesn't seem to be a recipe. Please try a food name!");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        throw new Error(data.error || "Failed to find recipe");
+      }
+
+      // Handle suggestions (ambiguous input)
+      if (data.type === "suggestions" && data.data?.suggestions) {
+        setSearchResultType("suggestions");
+        setSuggestions(data.data.suggestions);
+        
+        // Add to search history
+        if (searchText.trim() && !searchHistory.includes(searchText.trim())) {
+          setSearchHistory((prev) => [searchText.trim(), ...prev.slice(0, 4)]);
+        }
+
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        return;
+      }
+
+      // Handle single recipe (clear input or exact match)
+      if (data.type === "recipe" && data.data?.recipe) {
         const recipe = data.data.recipe;
+        setSearchResultType("recipe");
         setRecognitionResult({
           analysis: {
             dish_name: recipe.name,
@@ -180,8 +255,6 @@ export default function FoodRecognitionScreen() {
           generatedRecipe: recipe,
           similarRecipes: [],
         });
-        setSavedRecipeId(null); // Reset saved state for new result
-        setIsSavingRecipe(false);
 
         // Add to search history
         if (searchText.trim() && !searchHistory.includes(searchText.trim())) {
@@ -191,16 +264,18 @@ export default function FoodRecognitionScreen() {
         if (Platform.OS !== "web") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
-      } else {
-        throw new Error("Invalid response format");
+        return;
       }
+
+      throw new Error("Invalid response format");
     },
     onError: (error) => {
       console.error("Search error:", error);
-      Alert.alert(
-        "Search Failed",
-        "Couldn't find a recipe for that food. Try a different name or be more specific."
-      );
+      setSearchResultType("invalid");
+      setInvalidMessage(error.message || "Couldn't find a recipe for that food. Try a different name or be more specific.");
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     },
   });
 
@@ -331,6 +406,10 @@ export default function FoodRecognitionScreen() {
   const handleQuickSearch = (foodName) => {
     const cleanName = foodName.replace(/^\S+\s/, ""); // Remove emoji
     setSearchText(cleanName);
+    setRecognitionResult(null);
+    setSearchResultType(null);
+    setSuggestions([]);
+    setInvalidMessage("");
     textSearchMutation.mutate(cleanName);
   };
 
@@ -487,6 +566,9 @@ export default function FoodRecognitionScreen() {
     setSavedRecipeId(null);
     setIsSavingRecipe(false);
     setShowRecipePreview(false);
+    setSearchResultType(null);
+    setSuggestions([]);
+    setInvalidMessage("");
   };
 
   const isLoading =
@@ -728,7 +810,7 @@ export default function FoodRecognitionScreen() {
               </View>
 
               {/* Quick Search Options */}
-              {!recognitionResult && (
+              {!recognitionResult && !searchResultType && (
                 <View style={styles.quickSearchContainer}>
                   {/* Popular Searches */}
                   <View style={styles.searchSection}>
@@ -803,8 +885,49 @@ export default function FoodRecognitionScreen() {
           )}
         </Animated.View>
 
+        {/* Invalid Input Message */}
+        {searchResultType === "invalid" && invalidMessage && (
+          <View style={styles.resultsContainer}>
+            <View style={styles.errorCard}>
+              <Text
+                style={[styles.errorTitle, { fontFamily: "Inter_700Bold" }]}
+              >
+                Oops!
+              </Text>
+              <Text
+                style={[styles.errorMessage, { fontFamily: "Inter_400Regular" }]}
+              >
+                {invalidMessage}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.tryAgainButton}
+              onPress={() => {
+                setSearchResultType(null);
+                setInvalidMessage("");
+                setSearchText("");
+                // Also reset image if it was photo recognition
+                if (activeMode === "scan") {
+                  setSelectedImage(null);
+                }
+              }}
+            >
+              <Text
+                style={[
+                  styles.tryAgainText,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Try Another {activeMode === "scan" ? "Photo" : "Search"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Suggestions Modal will be shown below */}
+
         {/* Results Section (shared) */}
-        {recognitionResult && (
+        {recognitionResult && searchResultType === "recipe" && (
           <View style={styles.resultsContainer}>
             <Text
               style={[styles.resultsTitle, { fontFamily: "Inter_700Bold" }]}
@@ -1083,6 +1206,152 @@ export default function FoodRecognitionScreen() {
         )}
       </ScrollView>
 
+      {/* Suggestions Modal */}
+      <Modal
+        visible={searchResultType === "suggestions" && suggestions.length > 0}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setSearchResultType(null);
+          setSuggestions([]);
+        }}
+      >
+        <View style={suggestionsModalStyles.overlay}>
+          <View style={suggestionsModalStyles.modalContainer}>
+            {/* Header */}
+            <View style={suggestionsModalStyles.modalHeader}>
+              <View style={suggestionsModalStyles.headerContent}>
+                <Text
+                  style={[
+                    suggestionsModalStyles.modalTitle,
+                    { fontFamily: "Inter_700Bold" },
+                  ]}
+                >
+                  Did you mean one of these?
+                </Text>
+                <Text
+                  style={[
+                    suggestionsModalStyles.modalSubtitle,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  We found {suggestions.length} recipes related to "{searchText}"
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchResultType(null);
+                  setSuggestions([]);
+                }}
+                style={suggestionsModalStyles.closeButton}
+              >
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Suggestions List */}
+            <ScrollView 
+              style={suggestionsModalStyles.suggestionsList}
+              showsVerticalScrollIndicator={false}
+            >
+              {suggestions.map((recipe, index) => (
+                <TouchableOpacity
+                  key={recipe.id || index}
+                  style={suggestionsModalStyles.suggestionItem}
+                  onPress={() => {
+                    // Set this recipe as the recognition result
+                    setRecognitionResult({
+                      analysis: {
+                        dish_name: recipe.name,
+                        cuisine: recipe.cuisine || "Global",
+                        difficulty: recipe.difficulty || "medium",
+                        detected_ingredients: Array.isArray(recipe.ingredients)
+                          ? recipe.ingredients.map((ing) => 
+                              typeof ing === "string" ? ing : ing.name || ing.ingredient || ""
+                            ).filter(Boolean)
+                          : [],
+                      },
+                      generatedRecipe: recipe,
+                      similarRecipes: [],
+                    });
+                    // Close modal and show recipe
+                    setSearchResultType("recipe");
+                    setSuggestions([]);
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    }
+                  }}
+                >
+                  <View style={suggestionsModalStyles.suggestionContent}>
+                    <Text
+                      style={[
+                        suggestionsModalStyles.suggestionName,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      {recipe.name}
+                    </Text>
+                    {recipe.description && (
+                      <Text
+                        style={[
+                          suggestionsModalStyles.suggestionDescription,
+                          { fontFamily: "Inter_400Regular" },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {recipe.description}
+                      </Text>
+                    )}
+                    <View style={suggestionsModalStyles.suggestionMeta}>
+                      <Text
+                        style={[
+                          suggestionsModalStyles.suggestionMetaText,
+                          { fontFamily: "Inter_400Regular" },
+                        ]}
+                      >
+                        {recipe.cuisine || "Global"} • {recipe.difficulty || "Medium"} • {recipe.cooking_time || 30} min
+                      </Text>
+                      {recipe.average_rating && typeof recipe.average_rating === 'number' && (
+                        <Text
+                          style={[
+                            suggestionsModalStyles.suggestionRating,
+                            { fontFamily: "Inter_400Regular" },
+                          ]}
+                        >
+                          ⭐ {recipe.average_rating.toFixed(1)}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#666666" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Cancel Button */}
+            <View style={suggestionsModalStyles.modalActions}>
+              <TouchableOpacity
+                style={suggestionsModalStyles.cancelButton}
+                onPress={() => {
+                  setSearchResultType(null);
+                  setSuggestions([]);
+                  setSearchText("");
+                }}
+              >
+                <Text
+                  style={[
+                    suggestionsModalStyles.cancelButtonText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Try Another Search
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Collection Selection Modal */}
       <Modal
         visible={showCollectionModal}
@@ -1208,6 +1477,101 @@ export default function FoodRecognitionScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const suggestionsModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    paddingBottom: 32,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  headerContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    color: "#000000",
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  suggestionsList: {
+    maxHeight: 500,
+    padding: 20,
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FAFAFA",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+  },
+  suggestionContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  suggestionName: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 4,
+  },
+  suggestionDescription: {
+    fontSize: 13,
+    color: "#666666",
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  suggestionMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  suggestionMetaText: {
+    fontSize: 12,
+    color: "#999999",
+  },
+  suggestionRating: {
+    fontSize: 12,
+    color: "#FF9F1C",
+  },
+  modalActions: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  cancelButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#000000",
+  },
+});
 
 const collectionModalStyles = StyleSheet.create({
   overlay: {
@@ -1763,5 +2127,24 @@ const styles = StyleSheet.create({
   tryAgainText: {
     color: "#000000",
     fontSize: 14,
+  },
+  // Error/Invalid Input Styles
+  errorCard: {
+    backgroundColor: "#FFF5F5",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#EF4444",
+  },
+  errorTitle: {
+    fontSize: 20,
+    color: "#DC2626",
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: "#666666",
+    lineHeight: 20,
   },
 });

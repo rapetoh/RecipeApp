@@ -36,6 +36,7 @@ import { RecipeActionButtons } from "./RecipeActionButtons";
 import { MealPlanModal } from "./MealPlanModal";
 import { IngredientIcon } from "@/components/IngredientIcon";
 import { convertIngredients } from "@/utils/unitConverter";
+import { getApiUrl } from "@/config/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -76,7 +77,7 @@ export default function RecipeDetailScreen() {
     queryKey: ["preferences", auth?.user?.id],
     queryFn: async () => {
       if (!auth?.user?.id) return null;
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       try {
         const response = await fetch(`${apiUrl}/api/preferences?userId=${auth.user.id}`);
         if (response.ok) {
@@ -103,7 +104,7 @@ export default function RecipeDetailScreen() {
         throw new Error("Recipe ID is required");
       }
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       
       // First try user-recipes endpoint if authenticated (for user's own recipes)
       if (auth?.jwt) {
@@ -169,7 +170,7 @@ export default function RecipeDetailScreen() {
         throw new Error("Recipe ID is required");
       }
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/recipe-favorites`;
 
       if (action === "save") {
@@ -263,7 +264,7 @@ export default function RecipeDetailScreen() {
   // Add to meal plan mutation
   const addToMealPlanMutation = useMutation({
     mutationFn: async ({ date, mealType, recipeId }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       console.log('Adding to meal plan:', { date, mealType, recipeId, userId: auth?.user?.id });
       
       const response = await fetch(`${apiUrl}/api/meal-plans`, {

@@ -1,10 +1,10 @@
+import { getApiUrl as getApiUrlFromConfig } from '../config/api';
+
 /**
  * Get the API base URL from environment variables
  * Falls back to localhost for development
  */
-export const getApiUrl = () => {
-  return process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
-};
+export const getApiUrl = getApiUrlFromConfig;
 
 /**
  * Helper to make API calls with the correct base URL
@@ -21,4 +21,3 @@ export const apiFetch = async (endpoint, options = {}) => {
     },
   });
 };
-

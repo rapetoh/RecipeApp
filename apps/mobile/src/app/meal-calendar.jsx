@@ -26,6 +26,7 @@ import {
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 import * as Haptics from "expo-haptics";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -71,7 +72,7 @@ export default function MealCalendarScreen() {
       const startDate = firstDay.toISOString().split("T")[0];
       const endDate = lastDay.toISOString().split("T")[0];
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       console.log('📅 Calendar fetching meal plans:', { startDate, endDate, userId: auth.user.id });
 
       const response = await fetch(

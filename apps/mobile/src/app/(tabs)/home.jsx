@@ -29,9 +29,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Menu, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
 import VoiceSuggestions from "@/components/VoiceSuggestions";
+import { getApiUrl } from "@/config/api";
 
-const { width: screenWidth } = Dimensions.get("window");
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const cardWidth = (screenWidth - 44) / 2;
+
+// Calculate responsive spacing based on screen height
+const isSmallScreen = screenHeight < 700;
+const isMediumScreen = screenHeight >= 700 && screenHeight < 850;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -57,7 +62,7 @@ export default function HomeScreen() {
     queryFn: async () => {
       if (!auth?.user?.id) return null;
       try {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const apiUrl = getApiUrl();
         const response = await fetch(`${apiUrl}/api/preferences?userId=${auth.user.id}`);
         if (!response.ok) return null;
         const result = await response.json();
@@ -95,7 +100,7 @@ export default function HomeScreen() {
   // Accept recommendation mutation
   const acceptRecommendationMutation = useMutation({
     mutationFn: async (recommendationId) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/recommendations`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -185,6 +190,19 @@ export default function HomeScreen() {
     router.push("/food-recognition");
   };
 
+  const handleIngredientsToRecipesPress = () => {
+    if (!isAuthenticated) {
+      Alert.alert("Sign In Required", "Please sign in to use this feature", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => signIn() },
+      ]);
+      return;
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push("/ingredients-to-recipes");
+  };
 
   const handleRecipePress = (recipe) => {
     router.push(`/recipe-detail?id=${recipe.id}`);
@@ -196,7 +214,7 @@ export default function HomeScreen() {
     mutationFn: async (recipeId) => {
       if (!auth?.user?.id) throw new Error("User authentication required");
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/saved-recipes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -231,7 +249,7 @@ export default function HomeScreen() {
     mutationFn: async (recipeId) => {
       if (!auth?.user?.id) throw new Error("User authentication required");
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/meal-tracking`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -482,9 +500,42 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Ingredients to Recipes Banner */}
+        {isAuthenticated && (
+          <View style={[styles.promoBanner, { marginTop: isSmallScreen ? 10 : 12, backgroundColor: "#F0F9FF" }]}>
+            <View style={styles.promoContent}>
+              <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold", color: "#000000" }]}>
+                What Can I Cook?
+              </Text>
+              <Text
+                style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular", color: "#666666" }]}
+              >
+                Take a photo of your ingredients and get recipe suggestions.
+              </Text>
+              <TouchableOpacity
+                style={[styles.promoButton, { backgroundColor: "#0EA5E9" }]}
+                onPress={handleIngredientsToRecipesPress}
+              >
+                <Text style={styles.promoButtonIcon}>📸</Text>
+                <Text
+                  style={[
+                    styles.promoButtonText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Scan Ingredients
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.promoIcon}>
+              <Text style={styles.promoEmoji}>🥘</Text>
+            </View>
+          </View>
+        )}
+
         {/* Voice Suggestions Section - Replaces Today's Suggestions */}
         {isAuthenticated && (
-          <View style={styles.voiceSection}>
+          <View style={[styles.voiceSection, { marginTop: isSmallScreen ? 12 : 16, paddingVertical: isSmallScreen ? 20 : 24 }]}>
             <TouchableOpacity
               style={styles.voiceButton}
               onPress={handleVoiceButtonPress}
@@ -492,7 +543,7 @@ export default function HomeScreen() {
             >
               <View style={styles.voiceButtonGlow} />
               <View style={styles.voiceButtonInner}>
-                <Mic size={32} color="#FFFFFF" />
+                <Mic size={isSmallScreen ? 28 : 32} color="#FFFFFF" />
               </View>
             </TouchableOpacity>
             <Text
@@ -616,8 +667,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: isSmallScreen ? 12 : 16,
+    paddingBottom: isSmallScreen ? 6 : 8,
     backgroundColor: "#FFFFFF",
   },
   headerLeft: {
@@ -638,9 +689,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greeting: {
-    fontSize: 20,
+    fontSize: isSmallScreen ? 18 : 20,
     color: "#000000",
-    marginBottom: 4,
+    marginBottom: isSmallScreen ? 2 : 4,
   },
   timeText: {
     fontSize: 14,
@@ -729,8 +780,8 @@ const styles = StyleSheet.create({
   promoBanner: {
     backgroundColor: "#000000",
     borderRadius: 12,
-    padding: 20,
-    marginTop: 20,
+    padding: isSmallScreen ? 16 : 18,
+    marginTop: isSmallScreen ? 12 : 16,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -738,21 +789,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   promoTitle: {
-    fontSize: 18,
+    fontSize: isSmallScreen ? 16 : 18,
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   promoSubtitle: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     color: "#CCCCCC",
-    marginBottom: 12,
-    lineHeight: 20,
+    marginBottom: isSmallScreen ? 8 : 10,
+    lineHeight: isSmallScreen ? 18 : 20,
   },
   promoButton: {
     backgroundColor: "#FF9F1C",
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: isSmallScreen ? 14 : 16,
+    paddingVertical: isSmallScreen ? 6 : 8,
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
@@ -769,34 +820,34 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   promoEmoji: {
-    fontSize: 40,
+    fontSize: isSmallScreen ? 32 : 40,
   },
   voiceSection: {
-    marginTop: 24,
-    marginBottom: 20,
+    marginTop: 16,
+    marginBottom: 16,
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: 24,
   },
   voiceButton: {
-    width: 120,
-    height: 120,
+    width: isSmallScreen ? 100 : 120,
+    height: isSmallScreen ? 100 : 120,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: isSmallScreen ? 16 : 20,
     position: "relative",
   },
   voiceButtonGlow: {
     position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: isSmallScreen ? 120 : 140,
+    height: isSmallScreen ? 120 : 140,
+    borderRadius: isSmallScreen ? 60 : 70,
     backgroundColor: "#FF9F1C",
     opacity: 0.3,
   },
   voiceButtonInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: isSmallScreen ? 80 : 100,
+    height: isSmallScreen ? 80 : 100,
+    borderRadius: isSmallScreen ? 40 : 50,
     backgroundColor: "#FF9F1C",
     justifyContent: "center",
     alignItems: "center",
@@ -807,12 +858,12 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   voiceTitle: {
-    fontSize: 24,
+    fontSize: isSmallScreen ? 20 : 24,
     color: "#000000",
-    marginBottom: 8,
+    marginBottom: isSmallScreen ? 4 : 6,
   },
   voiceExample: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     color: "#666666",
     textAlign: "center",
     fontStyle: "italic",

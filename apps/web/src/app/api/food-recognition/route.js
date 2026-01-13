@@ -1,5 +1,6 @@
 import sql from "../utils/sql.js";
 import { analyzeImageWithVision, generateRecipeWithGPT } from "../utils/openai.js";
+import { findBestMatch } from "../utils/similarity.js";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {
@@ -135,13 +136,15 @@ export async function POST(request) {
         throw new Error("Missing required fields in analysis");
       }
 
-      // Lower confidence threshold for common foods (was 0.5, now 0.3)
-      if (analysisJson.confidence < 0.3) {
+      // Require 85% confidence to ensure accurate recipe generation
+      if (analysisJson.confidence < 0.85) {
         return Response.json(
           {
             success: false,
+            type: "low_confidence",
             error:
-              "Could not identify food in this image. Try a clearer photo of a dish.",
+              "We're not confident enough about what's in this image. Please try a clearer photo of a dish.",
+            confidence: analysisJson.confidence,
           },
           { status: 400 },
         );
@@ -197,17 +200,14 @@ export async function POST(request) {
     let generatedRecipe = null;
     let useExistingRecipe = false;
 
-    // If we found a very close match, use it instead of generating
+    // Check for 95%+ similarity match - use DB recipe if found
     if (similarRecipes.length > 0) {
-      const bestMatch = similarRecipes[0];
-      const dishLower = analysisJson.dish_name.toLowerCase();
-      const nameLower = bestMatch.name.toLowerCase();
-
-      // If the names are very similar, use existing recipe
-      if (nameLower.includes(dishLower) || dishLower.includes(nameLower)) {
-        generatedRecipe = bestMatch;
+      const bestMatch = findBestMatch(analysisJson.dish_name, similarRecipes, 95);
+      
+      if (bestMatch) {
+        generatedRecipe = bestMatch.recipe;
         useExistingRecipe = true;
-        console.log("Using existing recipe:", bestMatch.name);
+        console.log(`Using existing recipe (${bestMatch.similarity.toFixed(1)}% similar):`, bestMatch.recipe.name);
       }
     }
 

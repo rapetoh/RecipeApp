@@ -41,6 +41,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useUpload } from "@/utils/useUpload";
 import { useAuth, useRequireAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 
 export default function RecipeFormScreen() {
   const insets = useSafeAreaInsets();
@@ -49,7 +50,7 @@ export default function RecipeFormScreen() {
   const { edit } = useLocalSearchParams(); // If edit=recipeId, we're editing
   const [upload, { loading: uploadLoading }] = useUpload();
   const { auth, isAuthenticated } = useAuth();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+  const apiUrl = getApiUrl();
   
   // Automatically redirect to sign-in if not authenticated
   useRequireAuth();

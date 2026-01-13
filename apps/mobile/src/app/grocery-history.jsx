@@ -34,6 +34,7 @@ import {
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 import * as Haptics from "expo-haptics";
 
 export default function GroceryHistoryScreen() {
@@ -60,7 +61,7 @@ export default function GroceryHistoryScreen() {
     queryKey: ["grocery-lists", auth?.user?.id],
     queryFn: async () => {
       try {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const apiUrl = getApiUrl();
         const response = await fetch(
           `${apiUrl}/api/grocery-lists?userId=${auth?.user?.id}`,
         );
@@ -80,7 +81,7 @@ export default function GroceryHistoryScreen() {
   // Delete grocery list mutation
   const deleteListMutation = useMutation({
     mutationFn: async (listId) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/grocery-lists/${listId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -272,15 +273,6 @@ export default function GroceryHistoryScreen() {
               </View>
             </View>
 
-            {/* Cost Summary */}
-            <View style={styles.costSummary}>
-              <Text
-                style={[styles.costText, { fontFamily: "Inter_500Medium" }]}
-              >
-                Total estimated cost: $
-                {(Number(selectedList.estimated_cost) || 0).toFixed(2)}
-              </Text>
-            </View>
           </View>
 
           {/* Items List */}
@@ -300,7 +292,6 @@ export default function GroceryHistoryScreen() {
                     const itemName = item?.name || "Unknown Item";
                     const itemAmount = item?.amount || 0;
                     const itemUnit = item?.unit || "";
-                    const itemPrice = Number(item?.estimated_price) || 0;
 
                     return (
                       <View
@@ -339,15 +330,6 @@ export default function GroceryHistoryScreen() {
                             </Text>
                           </View>
                         </View>
-                        <Text
-                          style={[
-                            styles.itemPrice,
-                            { fontFamily: "Inter_500Medium" },
-                            isChecked && styles.itemPriceChecked,
-                          ]}
-                        >
-                          ${itemPrice.toFixed(2)}
-                        </Text>
                       </View>
                     );
                   })
@@ -469,14 +451,6 @@ export default function GroceryHistoryScreen() {
 
                   <View style={styles.listCardRight}>
                     <View style={styles.listCardMeta}>
-                      <Text
-                        style={[
-                          styles.listCardCost,
-                          { fontFamily: "Inter_500Medium" },
-                        ]}
-                      >
-                        ${(Number(list.estimated_cost) || 0).toFixed(2)}
-                      </Text>
                       <View
                         style={[
                           styles.progressBadge,
@@ -743,10 +717,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 4,
   },
-  listCardCost: {
-    fontSize: 16,
-    color: "#000000",
-  },
   progressBadge: {
     backgroundColor: "#F3F4F6",
     borderRadius: 12,
@@ -822,14 +792,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#FFFFFF",
   },
-  costSummary: {
-    marginTop: 8,
-    alignItems: "center",
-  },
-  costText: {
-    fontSize: 16,
-    color: "#000000",
-  },
 
   // Items Section
   itemsSection: {
@@ -883,13 +845,6 @@ const styles = StyleSheet.create({
   },
   itemQuantityChecked: {
     color: "#999999",
-  },
-  itemPrice: {
-    fontSize: 16,
-    color: "#000000",
-  },
-  itemPriceChecked: {
-    color: "#666666",
   },
 
   // Empty State

@@ -1,16 +1,17 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   RefreshControl,
   Alert,
   Platform,
   TextInput,
   Modal,
   KeyboardAvoidingView,
+  Dimensions,
+  FlatList,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -26,187 +27,21 @@ import {
   Plus,
   Search,
   ChefHat,
-  Clock,
-  BookOpen,
   Folder,
-  ChevronDown,
-  ChevronRight,
   Heart,
-  Trash2,
-  Edit,
   Sparkles,
+  BookOpen,
 } from "lucide-react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { useAuth, useRequireAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 
-// Collection Item Component
-function CollectionItem({ collection, isExpanded, onToggle, onDelete, onViewRecipe, onEditRecipe, onDeleteRecipe, apiUrl, auth, formatTime, searchText }) {
-  const [recipes, setRecipes] = useState([]);
-  const [loadingRecipes, setLoadingRecipes] = useState(false);
-
-  const loadRecipes = useCallback(async () => {
-    setLoadingRecipes(true);
-    try {
-      const response = await fetch(`${apiUrl}/api/collections/${collection.id}?userId=${auth?.user?.id}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
-        },
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const result = await response.json();
-        setRecipes(result.data?.recipes || []);
-      }
-    } catch (error) {
-      console.error("Error loading collection recipes:", error);
-    } finally {
-      setLoadingRecipes(false);
-    }
-  }, [apiUrl, auth?.user?.id, auth?.jwt, collection.id]);
-
-  useEffect(() => {
-    if (isExpanded) {
-      loadRecipes();
-    }
-  }, [isExpanded, loadRecipes]);
-
-  const getCollectionIcon = () => {
-    if (collection.system_type === 'favorites') return <Heart size={20} color="#10B981" />;
-    if (collection.system_type === 'my_creations') return <ChefHat size={20} color="#FF9F1C" />;
-    if (collection.system_type === 'generated') return <Sparkles size={20} color="#8B5CF6" />;
-    return <Folder size={20} color="#666666" />;
-  };
-
-  // Filter recipes based on searchText
-  const filteredRecipes = React.useMemo(() => {
-    if (!searchText || !searchText.trim()) {
-      return recipes;
-    }
-    const searchLower = searchText.toLowerCase();
-    return recipes.filter(recipe => 
-      recipe.name?.toLowerCase().includes(searchLower) ||
-      recipe.description?.toLowerCase().includes(searchLower) ||
-      recipe.cuisine?.toLowerCase().includes(searchLower) ||
-      recipe.category?.toLowerCase().includes(searchLower)
-    );
-  }, [recipes, searchText]);
-
-  return (
-    <View style={collectionStyles.container}>
-      <TouchableOpacity
-        style={collectionStyles.header}
-        onPress={onToggle}
-        activeOpacity={0.7}
-      >
-        <View style={collectionStyles.headerLeft}>
-          {isExpanded ? (
-            <ChevronDown size={20} color="#666666" />
-          ) : (
-            <ChevronRight size={20} color="#666666" />
-          )}
-          <View style={collectionStyles.iconContainer}>
-            {getCollectionIcon()}
-          </View>
-          <View style={collectionStyles.headerText}>
-            <Text style={[collectionStyles.collectionName, { fontFamily: "Inter_600SemiBold" }]}>
-              {collection.name}
-            </Text>
-            <Text style={[collectionStyles.recipeCount, { fontFamily: "Inter_400Regular" }]}>
-              {collection.recipe_count || 0} {collection.recipe_count === 1 ? 'recipe' : 'recipes'}
-            </Text>
-          </View>
-        </View>
-        {collection.collection_type === 'custom' && (
-          <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            style={collectionStyles.deleteButton}
-          >
-            <Trash2 size={16} color="#EF4444" />
-          </TouchableOpacity>
-        )}
-      </TouchableOpacity>
-
-      {isExpanded && (
-        <View style={collectionStyles.recipesContainer}>
-          {loadingRecipes ? (
-            <View style={collectionStyles.loadingContainer}>
-              <Text style={[{ fontFamily: "Inter_400Regular", color: "#999999" }]}>Loading...</Text>
-            </View>
-          ) : filteredRecipes.length === 0 ? (
-            <View style={collectionStyles.emptyCollection}>
-              <Text style={[{ fontFamily: "Inter_400Regular", color: "#999999", fontSize: 14 }]}>
-                {searchText ? "No recipes match your search" : "No recipes in this collection"}
-              </Text>
-            </View>
-          ) : (
-            filteredRecipes.map((recipe) => (
-              <View key={recipe.id} style={collectionStyles.recipeItemContainer}>
-                <TouchableOpacity
-                  style={collectionStyles.recipeItem}
-                  onPress={() => onViewRecipe(recipe.id)}
-                >
-                  <View style={collectionStyles.recipeItemLeft}>
-                    {recipe.image_url ? (
-                      <Image
-                        source={{ uri: recipe.image_url }}
-                        style={collectionStyles.recipeThumbnail}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={[collectionStyles.recipeThumbnail, collectionStyles.recipeThumbnailPlaceholder]}>
-                        <ChefHat size={20} color="#FF9F1C" />
-                      </View>
-                    )}
-                    <View style={collectionStyles.recipeItemInfo}>
-                      <Text
-                        style={[collectionStyles.recipeItemName, { fontFamily: "Inter_600SemiBold" }]}
-                        numberOfLines={1}
-                      >
-                        {recipe.name}
-                      </Text>
-                      <View style={collectionStyles.recipeItemMeta}>
-                        <Clock size={12} color="#999999" />
-                        <Text style={[collectionStyles.recipeItemMetaText, { fontFamily: "Inter_400Regular" }]}>
-                          {formatTime(recipe.cooking_time)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-                <View style={collectionStyles.recipeActions}>
-                  <TouchableOpacity
-                    style={collectionStyles.recipeActionButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onEditRecipe(recipe.id);
-                    }}
-                  >
-                    <Edit size={16} color="#FF9F1C" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={collectionStyles.recipeActionButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onDeleteRecipe(recipe);
-                    }}
-                  >
-                    <Trash2 size={16} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-      )}
-    </View>
-  );
-}
+const { width: screenWidth } = Dimensions.get("window");
+const CARD_MARGIN = 8;
+const CARD_PADDING = 16;
+const collectionCardWidth = (screenWidth - CARD_PADDING * 2 - CARD_MARGIN) / 2;
 
 export default function MyRecipesScreen() {
   const insets = useSafeAreaInsets();
@@ -215,10 +50,7 @@ export default function MyRecipesScreen() {
   const { auth, isAuthenticated } = useAuth();
   const [searchText, setSearchText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedCollections, setExpandedCollections] = useState(new Set());
   const [showCreateCollectionModal, setShowCreateCollectionModal] = useState(false);
-  
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
   
   // Automatically redirect to sign-in if not authenticated
   useRequireAuth();
@@ -239,6 +71,7 @@ export default function MyRecipesScreen() {
   } = useQuery({
     queryKey: ["collections", auth?.user?.id],
     queryFn: async () => {
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/collections?userId=${auth?.user?.id}`, {
         headers: {
           'Content-Type': 'application/json',
@@ -254,25 +87,22 @@ export default function MyRecipesScreen() {
       const result = await response.json();
       return result;
     },
-    staleTime: 30 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
     enabled: isAuthenticated && !!auth?.user?.id,
   });
 
   const collections = collectionsData?.data || [];
-  
-  // Auto-expand system collections by default
-  useEffect(() => {
-    if (collections.length > 0) {
-      const systemCollectionIds = collections
-        .filter(c => c.collection_type === 'system')
-        .map(c => c.id.toString());
-      setExpandedCollections(new Set(systemCollectionIds));
-    }
-  }, [collections.length]);
+
+  // Filter collections by search
+  const filteredCollections = collections.filter((collection) =>
+    collection.name.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   // Create collection mutation
   const createCollectionMutation = useMutation({
     mutationFn: async ({ name, description }) => {
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/collections?userId=${auth?.user?.id}`, {
         method: "POST",
         headers: {
@@ -306,6 +136,7 @@ export default function MyRecipesScreen() {
   // Delete collection mutation
   const deleteCollectionMutation = useMutation({
     mutationFn: async (collectionId) => {
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/collections/${collectionId}?userId=${auth?.user?.id}`, {
         method: "DELETE",
         headers: {
@@ -318,50 +149,6 @@ export default function MyRecipesScreen() {
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to delete collection");
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
-      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-    },
-    onError: (error) => {
-      Alert.alert("Error", error.message);
-    },
-  });
-
-  // Delete recipe mutation
-  const deleteRecipeMutation = useMutation({
-    mutationFn: async (recipeId) => {
-      // Try user-recipes endpoint first (for user-created recipes)
-      let response = await fetch(`${apiUrl}/api/user-recipes/${recipeId}`, {
-        method: "DELETE",
-        headers: {
-          'Content-Type': 'application/json',
-          ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
-        },
-        credentials: 'include',
-      });
-
-      // If 404, try main recipes endpoint (for AI-generated recipes owned by user)
-      if (response.status === 404) {
-        response = await fetch(`${apiUrl}/api/recipes/${recipeId}`, {
-          method: "DELETE",
-          headers: {
-            'Content-Type': 'application/json',
-            ...(auth?.jwt && { 'Authorization': `Bearer ${auth.jwt}` }),
-          },
-          credentials: 'include',
-        });
-      }
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to delete recipe");
       }
 
       return response.json();
@@ -398,38 +185,20 @@ export default function MyRecipesScreen() {
     router.push("/recipe-form");
   };
 
-  const handleViewRecipe = (recipeId) => {
+  const handleCollectionPress = (collectionId) => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push(`/recipe-detail?id=${recipeId}`);
-  };
-
-  const handleEditRecipe = (recipeId) => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push(`/recipe-form?edit=${recipeId}`);
-  };
-
-  const toggleCollection = (collectionId) => {
-    const newExpanded = new Set(expandedCollections);
-    if (newExpanded.has(collectionId.toString())) {
-      newExpanded.delete(collectionId.toString());
-    } else {
-      newExpanded.add(collectionId.toString());
-    }
-    setExpandedCollections(newExpanded);
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    router.push(`/my-recipes/${collectionId}`);
   };
 
   const handleCreateCollection = () => {
     setShowCreateCollectionModal(true);
   };
 
-  const handleDeleteCollection = (collection) => {
+  const handleDeleteCollection = (collection, event) => {
+    event?.stopPropagation();
+    
     if (collection.collection_type === 'system') {
       Alert.alert("Cannot Delete", "System collections cannot be deleted.");
       return;
@@ -449,32 +218,53 @@ export default function MyRecipesScreen() {
     );
   };
 
-  const handleDeleteRecipe = (recipe) => {
-    Alert.alert(
-      "Delete Recipe",
-      `Are you sure you want to delete "${recipe.name}"? This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteRecipeMutation.mutate(recipe.id),
-        },
-      ],
-    );
+  const getCollectionIcon = (collection) => {
+    if (collection.system_type === 'favorites') return <Heart size={24} color="#10B981" />;
+    if (collection.system_type === 'my_creations') return <ChefHat size={24} color="#FF9F1C" />;
+    if (collection.system_type === 'generated') return <Sparkles size={24} color="#8B5CF6" />;
+    return <Folder size={24} color="#666666" />;
   };
 
-  const formatTime = (minutes) => {
-    if (!minutes) return "Quick";
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const getCollectionColor = (collection) => {
+    if (collection.system_type === 'favorites') return "#10B981";
+    if (collection.system_type === 'my_creations') return "#FF9F1C";
+    if (collection.system_type === 'generated') return "#8B5CF6";
+    return "#666666";
+  };
+
+  const renderCollectionCard = ({ item: collection }) => {
+    const iconColor = getCollectionColor(collection);
+    
+    return (
+      <TouchableOpacity
+        style={[styles.collectionCard, { width: collectionCardWidth }]}
+        onPress={() => handleCollectionPress(collection.id)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.collectionIconContainer, { backgroundColor: `${iconColor}15` }]}>
+          {getCollectionIcon(collection)}
+        </View>
+        <Text style={[styles.collectionName, { fontFamily: "Inter_600SemiBold" }]} numberOfLines={2}>
+          {collection.name}
+        </Text>
+        <Text style={[styles.collectionCount, { fontFamily: "Inter_400Regular" }]}>
+          {collection.recipe_count || 0} {collection.recipe_count === 1 ? 'recipe' : 'recipes'}
+        </Text>
+        {collection.collection_type === 'custom' && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={(e) => handleDeleteCollection(collection, e)}
+          >
+            <Text style={[styles.deleteButtonText, { fontFamily: "Inter_500Medium" }]}>Delete</Text>
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
   };
 
   if (!fontsLoaded) return null;
 
-  const isEmpty = collections.length === 0 && !loading;
+  const isEmpty = filteredCollections.length === 0 && !loading;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -508,7 +298,7 @@ export default function MyRecipesScreen() {
           <Search size={20} color="#999999" />
           <TextInput
             style={[styles.searchInput, { fontFamily: "Inter_400Regular" }]}
-            placeholder="Search your recipes..."
+            placeholder="Search collections..."
             placeholderTextColor="#999999"
             value={searchText}
             onChangeText={setSearchText}
@@ -516,52 +306,40 @@ export default function MyRecipesScreen() {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Empty State */}
-        {isEmpty && !loading && (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <BookOpen size={48} color="#CCCCCC" />
-            </View>
-            <Text style={[styles.emptyTitle, { fontFamily: "Inter_700Bold" }]}>
-              No Recipes Yet
-            </Text>
-            <Text
-              style={[styles.emptySubtitle, { fontFamily: "Inter_400Regular" }]}
-            >
-              Your recipes will be organized into collections here
-            </Text>
+      {/* Collections Grid */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { fontFamily: "Inter_400Regular" }]}>Loading...</Text>
+        </View>
+      ) : isEmpty ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIcon}>
+            <BookOpen size={48} color="#CCCCCC" />
           </View>
-        )}
-
-        {/* Collections List */}
-        {collections.map((collection) => (
-          <CollectionItem
-            key={collection.id}
-            collection={collection}
-            isExpanded={expandedCollections.has(collection.id.toString())}
-            onToggle={() => toggleCollection(collection.id)}
-            onDelete={() => handleDeleteCollection(collection)}
-            onViewRecipe={handleViewRecipe}
-            onEditRecipe={handleEditRecipe}
-            onDeleteRecipe={handleDeleteRecipe}
-            apiUrl={apiUrl}
-            auth={auth}
-            formatTime={formatTime}
-            searchText={searchText}
-          />
-        ))}
-      </ScrollView>
+          <Text style={[styles.emptyTitle, { fontFamily: "Inter_700Bold" }]}>
+            No Collections Yet
+          </Text>
+          <Text style={[styles.emptySubtitle, { fontFamily: "Inter_400Regular" }]}>
+            Create a collection to organize your recipes
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredCollections}
+          renderItem={renderCollectionCard}
+          keyExtractor={(item) => item.id.toString()}
+          numColumns={2}
+          contentContainerStyle={[
+            styles.gridContent,
+            { paddingBottom: insets.bottom + 100 },
+          ]}
+          columnWrapperStyle={styles.row}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+        />
+      )}
 
       {/* Create Collection Modal */}
       <CreateCollectionModal
@@ -773,6 +551,8 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     color: "#000000",
+    flex: 1,
+    textAlign: "center",
   },
   headerActions: {
     flexDirection: "row",
@@ -821,12 +601,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#000000",
   },
-  content: {
-    flex: 1,
+  gridContent: {
+    padding: CARD_PADDING,
   },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+  row: {
+    justifyContent: "space-between",
+    marginBottom: CARD_MARGIN * 2,
+  },
+  collectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: CARD_MARGIN * 2,
+  },
+  collectionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  collectionName: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 4,
+    minHeight: 40,
+  },
+  collectionCount: {
+    fontSize: 13,
+    color: "#666666",
+    marginBottom: 8,
+  },
+  deleteButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#F8F8F8",
+    borderRadius: 8,
+    alignSelf: "flex-start",
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    color: "#EF4444",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666666",
   },
   emptyState: {
     flex: 1,
@@ -849,128 +684,5 @@ const styles = StyleSheet.create({
     color: "#666666",
     textAlign: "center",
     lineHeight: 24,
-    marginBottom: 32,
-  },
-});
-
-const collectionStyles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: "hidden",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#F8F8F8",
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 12,
-    marginRight: 12,
-  },
-  headerText: {
-    flex: 1,
-  },
-  collectionName: {
-    fontSize: 16,
-    color: "#000000",
-    marginBottom: 2,
-  },
-  recipeCount: {
-    fontSize: 12,
-    color: "#666666",
-  },
-  deleteButton: {
-    padding: 8,
-  },
-  recipesContainer: {
-    padding: 12,
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: "center",
-  },
-  emptyCollection: {
-    padding: 20,
-    alignItems: "center",
-  },
-  recipeItemContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  recipeItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: "#FAFAFA",
-  },
-  recipeItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  recipeThumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  recipeThumbnailPlaceholder: {
-    backgroundColor: "#F0F0F0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  recipeItemInfo: {
-    flex: 1,
-  },
-  recipeItemName: {
-    fontSize: 15,
-    color: "#000000",
-    marginBottom: 4,
-  },
-  recipeItemMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  recipeItemMetaText: {
-    fontSize: 12,
-    color: "#999999",
-  },
-  recipeActions: {
-    flexDirection: "row",
-    gap: 8,
-    paddingLeft: 8,
-  },
-  recipeActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F8F8F8",
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

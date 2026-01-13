@@ -47,6 +47,7 @@ import { useAuth } from "@/utils/auth/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { IngredientIcon } from "@/components/IngredientIcon";
+import { getApiUrl } from "@/config/api";
 
 const GOALS_OPTIONS = [
   { id: "save_time", label: "Save time", icon: Target, color: "#FF6B6B" },
@@ -212,7 +213,7 @@ export default function PreferencesScreen() {
         return;
       }
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/preferences?userId=${userId}`);
       const result = await response.json();
 
@@ -285,7 +286,7 @@ export default function PreferencesScreen() {
         applyPreferencesInAssistant,
       };
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/preferences`, {
         method: "POST",
         headers: {

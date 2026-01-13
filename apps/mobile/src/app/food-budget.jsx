@@ -39,6 +39,7 @@ import {
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 import * as Haptics from "expo-haptics";
 
 export default function FoodBudgetScreen() {
@@ -70,7 +71,7 @@ export default function FoodBudgetScreen() {
     queryKey: ["preferences", auth?.user?.id],
     queryFn: async () => {
       if (!auth?.user?.id) return null;
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(
         `${apiUrl}/api/preferences?userId=${auth.user.id}`,
       );
@@ -91,7 +92,7 @@ export default function FoodBudgetScreen() {
   const { data: groceryLists, isLoading } = useQuery({
     queryKey: ["grocery-lists", auth?.user?.id],
     queryFn: async () => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(
         `${apiUrl}/api/grocery-lists?userId=${auth?.user?.id}`,
       );
@@ -195,7 +196,7 @@ export default function FoodBudgetScreen() {
     mutationFn: async ({ budgetAmount, budgetPeriod }) => {
       if (!auth?.user?.id) throw new Error("User not authenticated");
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/preferences`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

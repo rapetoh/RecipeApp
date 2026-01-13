@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { IngredientIcon } from "@/components/IngredientIcon";
 import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { getApiUrl } from "@/config/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -143,7 +144,7 @@ export default function CookingModeScreen() {
         throw new Error("Recipe ID is required");
       }
       
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(
         `${apiUrl}/api/recipes/${id}?userId=${auth?.user?.id || ""}`,
       );

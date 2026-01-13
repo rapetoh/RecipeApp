@@ -1,5 +1,6 @@
 import sql from "../utils/sql.js";
 import OpenAI from "openai";
+import { validateVoiceInput } from "../utils/openai.js";
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -107,6 +108,25 @@ export async function POST(request) {
       );
     }
 
+    // Validate that the transcription is food/recipe-related (accepts natural language)
+    try {
+      const validation = await validateVoiceInput(transcription.trim());
+      if (!validation.isValid) {
+        return Response.json(
+          {
+            success: false,
+            type: "invalid",
+            error: validation.reason || "This doesn't seem to be a food-related request. Please try asking about recipes or meals.",
+            transcription: transcription, // Include transcription in response for UI display
+          },
+          { status: 400 }
+        );
+      }
+    } catch (validationError) {
+      console.error("Error validating voice input:", validationError);
+      // Continue processing if validation fails (don't block user)
+    }
+
     // Get user preferences and context
     const [
       userPrefs,
@@ -127,10 +147,10 @@ export async function POST(request) {
       sql`
         SELECT 
           r.name, r.tags, r.cuisine, r.category
-        FROM saved_recipes sr
-        JOIN recipes r ON sr.recipe_id = r.id
-        WHERE sr.user_id = ${userId}::uuid
-        ORDER BY sr.created_at DESC
+        FROM recipe_favorites rf
+        JOIN recipes r ON rf.recipe_id = r.id
+        WHERE rf.user_id = ${userId}::uuid
+        ORDER BY rf.created_at DESC
         LIMIT 20
       `,
       sql`
@@ -286,7 +306,7 @@ export async function POST(request) {
     return Response.json({
       success: true,
       transcription,
-      recipes: recipesWithScores.slice(0, 5), // Return top 5
+      recipes: recipesWithScores.slice(0, 10), // Return top 10
     });
   } catch (error) {
     console.error("Error in voice-suggestions endpoint:", error);
@@ -339,6 +359,111 @@ async function generateVoiceBasedSuggestions(
     );
   }
 
+  // Analyze user's favorite recipes patterns
+  const analyzeFavoritePatterns = (recipes) => {
+    if (!recipes || recipes.length === 0) return null;
+
+    const cuisines = recipes
+      .map(r => r.cuisine)
+      .filter(Boolean)
+      .filter(c => c.trim() !== "");
+    
+    const categories = recipes
+      .map(r => r.category)
+      .filter(Boolean)
+      .filter(c => c.trim() !== "");
+
+    // Extract all tags from recipes
+    const allTags = recipes
+      .flatMap(r => (Array.isArray(r.tags) ? r.tags : []))
+      .filter(Boolean)
+      .map(t => typeof t === 'string' ? t.toLowerCase() : t);
+
+    // Count tag frequency
+    const tagCounts = {};
+    allTags.forEach(tag => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    });
+
+    // Get most common tags (appearing in at least 2 recipes or 20% of recipes)
+    const minOccurrences = Math.max(2, Math.ceil(recipes.length * 0.2));
+    const commonTags = Object.entries(tagCounts)
+      .filter(([_, count]) => count >= minOccurrences)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 5)
+      .map(([tag, _]) => tag);
+
+    // Count cuisine frequency
+    const cuisineCounts = {};
+    cuisines.forEach(cuisine => {
+      cuisineCounts[cuisine] = (cuisineCounts[cuisine] || 0) + 1;
+    });
+    const topCuisines = Object.entries(cuisineCounts)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 3)
+      .map(([cuisine, _]) => cuisine);
+
+    // Count category frequency
+    const categoryCounts = {};
+    categories.forEach(category => {
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+    const topCategories = Object.entries(categoryCounts)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 3)
+      .map(([category, _]) => category);
+
+    return {
+      topCuisines,
+      topCategories,
+      commonTags,
+    };
+  };
+
+  // Analyze user's created recipes patterns
+  const analyzeCreatedPatterns = (recipes) => {
+    if (!recipes || recipes.length === 0) return null;
+
+    const cuisines = recipes
+      .map(r => r.cuisine)
+      .filter(Boolean)
+      .filter(c => c.trim() !== "");
+    
+    const categories = recipes
+      .map(r => r.category)
+      .filter(Boolean)
+      .filter(c => c.trim() !== "");
+
+    // Count cuisine frequency
+    const cuisineCounts = {};
+    cuisines.forEach(cuisine => {
+      cuisineCounts[cuisine] = (cuisineCounts[cuisine] || 0) + 1;
+    });
+    const topCuisines = Object.entries(cuisineCounts)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 3)
+      .map(([cuisine, _]) => cuisine);
+
+    // Count category frequency
+    const categoryCounts = {};
+    categories.forEach(category => {
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+    const topCategories = Object.entries(categoryCounts)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 3)
+      .map(([category, _]) => category);
+
+    return {
+      topCuisines,
+      topCategories,
+    };
+  };
+
+  // Analyze patterns from user's actual behavior
+  const favoritePatterns = analyzeFavoritePatterns(savedRecipes);
+  const createdPatterns = analyzeCreatedPatterns(createdRecipes);
+
   // Build context (only when applyPreferences is true)
   const context = [];
   if (applyPreferences) {
@@ -362,6 +487,37 @@ async function generateVoiceBasedSuggestions(
     if (userPreferences?.goals && Array.isArray(userPreferences.goals) && userPreferences.goals.length > 0) {
       context.push(`Health goals: ${userPreferences.goals.join(", ")}`);
     }
+
+    // Add insights from user's favorite recipes
+    if (favoritePatterns) {
+      const insights = [];
+      if (favoritePatterns.topCuisines.length > 0) {
+        insights.push(`User's favorite recipes are primarily ${favoritePatterns.topCuisines.join(", ")} cuisine(s)`);
+      }
+      if (favoritePatterns.topCategories.length > 0) {
+        insights.push(`User tends to save ${favoritePatterns.topCategories.join(", ")} recipes`);
+      }
+      if (favoritePatterns.commonTags.length > 0) {
+        insights.push(`User's favorites often include: ${favoritePatterns.commonTags.join(", ")}`);
+      }
+      if (insights.length > 0) {
+        context.push(`Based on user's saved favorites: ${insights.join("; ")}`);
+      }
+    }
+
+    // Add insights from user's created recipes
+    if (createdPatterns) {
+      const insights = [];
+      if (createdPatterns.topCuisines.length > 0) {
+        insights.push(`User typically creates ${createdPatterns.topCuisines.join(", ")} style recipes`);
+      }
+      if (createdPatterns.topCategories.length > 0) {
+        insights.push(`User often creates ${createdPatterns.topCategories.join(", ")} recipes`);
+      }
+      if (insights.length > 0) {
+        context.push(`Based on user's created recipes: ${insights.join("; ")}`);
+      }
+    }
   }
 
   // Determine unit examples based on measurement system
@@ -371,9 +527,17 @@ async function generateVoiceBasedSuggestions(
 
   const prompt = `You are an expert nutritionist and chef AI assistant. The user just said: "${vibe}"
 
-Generate 3-5 personalized recipe suggestions that match their current mood and request.
+Generate EXACTLY 10 personalized recipe suggestions that match their current mood and request. You MUST return exactly 10 recipes, no more, no less.
 
-CRITICAL REQUIREMENTS (MUST FOLLOW):
+CRITICAL RECIPE REQUIREMENTS:
+- Generate ONLY real, traditional, or well-known recipes that actually exist
+- Do NOT invent new recipe combinations or make up recipes
+- Use standard, tested cooking methods and realistic cooking times
+- Ensure all ingredient combinations are authentic and commonly used together
+- Cooking times must be realistic (e.g., quick meals: 15-30 min, standard: 30-60 min, complex: 60+ min)
+- Use proper cooking temperatures and techniques that are standard for each dish type
+
+CRITICAL SAFETY REQUIREMENTS (MUST FOLLOW):
 ${hardConstraints.length > 0 ? hardConstraints.join("\n") : "None"}
 
 ${applyPreferences && context.length > 0 ? `USER PREFERENCES:\n${context.join("\n")}\n\n` : ''}IMPORTANT: Use ${measurementSystem === 'imperial' ? 'US Imperial units (cups, ounces, pounds, tsp, tbsp)' : 'Metric units (grams, kilograms, milliliters, liters)'} for all ingredient measurements.
@@ -383,6 +547,7 @@ Based on their request "${vibe}", create recipes that:
 2. Respect their dietary restrictions
 3. Are varied and appealing
 4. Use ${measurementSystem === 'imperial' ? 'US Imperial' : 'Metric'} measurement units
+5. Are real, authentic recipes that people actually cook
 
 Respond with ONLY a JSON object:
 {
@@ -418,7 +583,7 @@ Respond with ONLY a JSON object:
         content: prompt,
       },
     ],
-    max_tokens: 3000,
+    max_tokens: 4000,
     response_format: { type: "json_object" },
   });
 
@@ -428,7 +593,17 @@ Respond with ONLY a JSON object:
   }
 
   const parsed = JSON.parse(content);
-  return parsed.recipes || [];
+  let recipes = parsed.recipes || [];
+  
+  // Ensure we have exactly 10 recipes (pad or trim if needed)
+  if (recipes.length < 10) {
+    console.warn(`AI only generated ${recipes.length} recipes, expected 10`);
+    // If we have fewer than 10, we'll return what we have (better than padding with duplicates)
+  } else if (recipes.length > 10) {
+    recipes = recipes.slice(0, 10);
+  }
+  
+  return recipes;
 }
 
 // Calculate match score based on vibe and recipe

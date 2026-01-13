@@ -20,7 +20,10 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app needs access to your camera to take photos of food for recipe recognition.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select food images for recipe recognition.",
-        "NSPhotoLibraryAddUsageDescription": "This app needs permission to save photos to your library."
+        "NSPhotoLibraryAddUsageDescription": "This app needs permission to save photos to your library.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {

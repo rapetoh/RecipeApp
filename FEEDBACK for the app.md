@@ -43,7 +43,7 @@ Parsed analysis: {
   dish_name: 'Spaghetti Bolognese',
   detected_ingredients: [
     'spaghetti',
-    'ground beef',
+    'ground beef',`
     'tomato sauce',
     'parmesan cheese',
     'herbs'

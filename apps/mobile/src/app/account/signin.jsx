@@ -72,16 +72,25 @@ export default function SignInScreen() {
 
     try {
       const apiUrl = getApiUrl();
+      const signinUrl = `${apiUrl}/api/auth/signin`;
+      
+      console.log('🔍 [SIGNIN DEBUG] API URL:', apiUrl);
+      console.log('🔍 [SIGNIN DEBUG] Full URL:', signinUrl);
+      console.log('🔍 [SIGNIN DEBUG] Is Dev Mode:', __DEV__);
+      
       const formData = new FormData();
       formData.append("email", email.trim());
       formData.append("password", password);
       formData.append("callbackUrl", "/api/auth/token");
 
-      const response = await fetch(`${apiUrl}/api/auth/signin`, {
+      console.log('🔍 [SIGNIN DEBUG] Starting fetch...');
+      const response = await fetch(signinUrl, {
         method: "POST",
         body: formData,
         credentials: "include",
       });
+      
+      console.log('🔍 [SIGNIN DEBUG] Response status:', response.status);
 
       const data = await response.json();
 

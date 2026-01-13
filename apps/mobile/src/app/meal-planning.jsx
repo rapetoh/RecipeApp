@@ -34,6 +34,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
 import { RecipeSelectionModal } from "./RecipeSelectionModal";
+import { getApiUrl } from "@/config/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -187,7 +188,7 @@ export default function MealPlanningScreen() {
       const startDate = next14Days[0].date;
       const endDate = next14Days[13].date;
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       console.log('🔄 Fetching meal plans for date range:', { startDate, endDate, userId: auth.user.id });
       
       const response = await fetch(
@@ -210,7 +211,7 @@ export default function MealPlanningScreen() {
   // Add meal mutation
   const addMealMutation = useMutation({
     mutationFn: async ({ date, mealType, recipeId }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       console.log('Adding meal from meal planning:', { date, mealType, recipeId, userId: auth?.user?.id });
       
       const response = await fetch(`${apiUrl}/api/meal-plans`, {
@@ -253,7 +254,7 @@ export default function MealPlanningScreen() {
   // Remove meal mutation
   const removeMealMutation = useMutation({
     mutationFn: async ({ mealPlanId }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       console.log('Removing meal:', { mealPlanId, userId: auth?.user?.id });
       
       const response = await fetch(
@@ -288,7 +289,7 @@ export default function MealPlanningScreen() {
       const startDate = next14Days[0].date;
       const endDate = next14Days[13].date;
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/grocery-lists`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

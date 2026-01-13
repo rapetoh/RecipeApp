@@ -13,6 +13,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   AppState,
+  FlatList,
 } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +27,7 @@ import {
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
-import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder } from "lucide-react-native";
+import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder, Heart } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/utils/api";
@@ -34,6 +35,11 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 
 const { width: screenWidth } = Dimensions.get("window");
+const CARD_MARGIN = 8;
+const CARD_PADDING = 16;
+// Account for BottomSheet structure: contentContainer (20px) + gridContent (16px) padding on each side
+const HORIZONTAL_PADDING = 20 + 16; // contentContainer paddingHorizontal + gridContent padding
+const recipeCardWidth = (screenWidth - (HORIZONTAL_PADDING * 2) - CARD_MARGIN) / 2;
 
 export default function VoiceSuggestions({ visible, onClose }) {
   const insets = useSafeAreaInsets();
@@ -44,10 +50,11 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [transcription, setTranscription] = useState("");
-  const [stage, setStage] = useState("listening"); // listening, processing, results
+  const [stage, setStage] = useState("listening"); // listening, processing, results, error
   const [activeStep, setActiveStep] = useState(0); // 0: voice recognized, 1: filtering, 2: checking pantry
   const [results, setResults] = useState([]);
   const [vibeText, setVibeText] = useState("");
+  const [invalidMessage, setInvalidMessage] = useState(""); // Error message for invalid input
   const recordingAttemptedRef = useRef(false);
   const [savedRecipeIds, setSavedRecipeIds] = useState(new Set()); // Track saved recipes
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -318,12 +325,32 @@ export default function VoiceSuggestions({ visible, onClose }) {
       if (!result.ok) {
         const errorText = await result.text();
         let errorMessage = "Failed to process voice input";
+        let errorType = null;
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
+          errorType = errorData.type;
         } catch (e) {
           errorMessage = `Server error (${result.status})`;
         }
+        
+        // Handle invalid input (400 with type: "invalid") - show error card instead of alert
+        if (result.status === 400 && errorType === "invalid") {
+          setInvalidMessage(errorMessage);
+          // Try to get transcription from error response
+          try {
+            const errorData = JSON.parse(errorText);
+            setVibeText(errorData.transcription || transcription || "your request");
+          } catch (e) {
+            setVibeText(transcription || "your request");
+          }
+          setStage("error");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        
         console.error("API error:", result.status, errorMessage);
         Alert.alert("Error", errorMessage);
         setStage("listening");
@@ -340,6 +367,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setResults(data.recipes || []);
         setStage("results");
       } else {
+        // Handle invalid input response
+        if (data.type === "invalid") {
+          setInvalidMessage(data.error || "This doesn't seem to be a food-related request. Please try asking about recipes or meals.");
+          setVibeText(data.transcription || transcription || "your request");
+          setStage("error");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        
         Alert.alert("Error", data.error || "Failed to process voice input");
         setStage("listening");
         startRecording();
@@ -384,12 +422,32 @@ export default function VoiceSuggestions({ visible, onClose }) {
       if (!result.ok) {
         const errorText = await result.text();
         let errorMessage = "Failed to process request";
+        let errorType = null;
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
+          errorType = errorData.type;
         } catch (e) {
           errorMessage = `Server error (${result.status})`;
         }
+        
+        // Handle invalid input (400 with type: "invalid") - show error card instead of alert
+        if (result.status === 400 && errorType === "invalid") {
+          setInvalidMessage(errorMessage);
+          // Try to get transcription from error response
+          try {
+            const errorData = JSON.parse(errorText);
+            setVibeText(errorData.transcription || text || "your request");
+          } catch (e) {
+            setVibeText(text || "your request");
+          }
+          setStage("error");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        
         console.error("API error:", result.status, errorMessage);
         Alert.alert("Error", errorMessage);
         setStage("listening");
@@ -405,6 +463,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setResults(data.recipes || []);
         setStage("results");
       } else {
+        // Handle invalid input response
+        if (data.type === "invalid") {
+          setInvalidMessage(data.error || "This doesn't seem to be a food-related request. Please try asking about recipes or meals.");
+          setVibeText(data.transcription || text || "your request");
+          setStage("error");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
+          return;
+        }
+        
         Alert.alert("Error", data.error || "Failed to process request");
         setStage("listening");
       }
@@ -419,12 +488,96 @@ export default function VoiceSuggestions({ visible, onClose }) {
     setStage("listening");
     setResults([]);
     setVibeText("");
+    setInvalidMessage("");
     setActiveStep(0);
     recordingAttemptedRef.current = false;
     // Wait a bit before starting recording again
     setTimeout(() => {
       startRecording();
     }, 300);
+  };
+
+  const formatTime = (minutes) => {
+    if (!minutes) return "Quick";
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  };
+
+  const getCategory = (recipe) => {
+    if (recipe.category) return recipe.category;
+    if (recipe.cuisine) return recipe.cuisine;
+    return "Recipe";
+  };
+
+  const renderRecipeCard = ({ item: recipe }) => {
+    const isSaved = savedRecipeIds.has(recipe.id);
+    
+    return (
+      <TouchableOpacity
+        style={[styles.gridRecipeCard, { width: recipeCardWidth }]}
+        onPress={() => handleRecipePress(recipe)}
+        activeOpacity={0.7}
+      >
+        {/* Recipe Image */}
+        <View style={styles.gridImageContainer}>
+          {recipe.image_url && recipe.image_url.trim() !== "" ? (
+            <Image
+              source={{ uri: recipe.image_url }}
+              style={styles.gridRecipeImage}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <View style={styles.gridPlaceholderImage}>
+              <ChefHat size={32} color="#CCCCCC" />
+            </View>
+          )}
+          
+          {/* Heart Badge - Favorite Button */}
+          <TouchableOpacity
+            style={styles.gridHeartBadge}
+            onPress={(e) => {
+              e.stopPropagation();
+              if (!isSaved) {
+                handleKeepRecipe(recipe, e);
+              } else {
+                handleRecipePress(recipe);
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Heart 
+              size={14} 
+              color="#FFFFFF" 
+              fill={isSaved ? "#FFFFFF" : "none"} 
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Recipe Info */}
+        <View style={styles.gridRecipeInfo}>
+          <Text
+            style={[styles.gridRecipeTitle, { fontFamily: "Inter_600SemiBold" }]}
+            numberOfLines={2}
+          >
+            {recipe.name}
+          </Text>
+          <View style={styles.gridRecipeMeta}>
+            <View style={styles.gridMetaItem}>
+              <Clock size={12} color="#999999" />
+              <Text style={[styles.gridMetaText, { fontFamily: "Inter_400Regular" }]}>
+                {formatTime(recipe.cooking_time)}
+              </Text>
+            </View>
+            <Text style={[styles.gridCategoryText, { fontFamily: "Inter_400Regular" }]}>
+              {getCategory(recipe)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   // Button handler - closes the sheet using imperative API
@@ -441,6 +594,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
     setStage("listening");
     setResults([]);
     setVibeText("");
+    setInvalidMessage("");
     setActiveStep(0);
     recordingAttemptedRef.current = false;
     setSheetIndex(-1);
@@ -602,6 +756,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
             {stage === "listening" && "I'm listening..."}
             {stage === "processing" && "Processing..."}
             {stage === "results" && `Found ${results.length} Recipe${results.length !== 1 ? "s" : ""}`}
+            {stage === "error" && "Oops!"}
           </Text>
           <TouchableOpacity 
             onPress={handleCloseButton}
@@ -791,10 +946,74 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
         {/* Results Stage */}
         {stage === "results" && (
+          <View style={styles.resultsContainer}>
+            <Text
+              style={[
+                styles.resultsSubtitle,
+                { fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              Based on '{vibeText}'
+            </Text>
+
+            <FlatList
+              data={results}
+              renderItem={renderRecipeCard}
+              keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+              numColumns={2}
+              columnWrapperStyle={styles.gridRow}
+              contentContainerStyle={styles.gridContent}
+              showsVerticalScrollIndicator={true}
+              ListFooterComponent={
+                <View style={styles.resultsActions}>
+                  <TouchableOpacity
+                    style={styles.tryAgainButton}
+                    onPress={handleTryAgain}
+                  >
+                    <Mic size={18} color="#FF9F1C" />
+                    <Text
+                      style={[
+                        styles.tryAgainText,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      Try Again
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.viewPlannerButton}
+                    onPress={() => {
+                      if (Platform.OS !== "web") {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                      handleCloseButton(); // Close the modal first
+                      // Navigate to meal planning page
+                      setTimeout(() => {
+                        router.push('/meal-planning');
+                      }, 300); // Small delay to ensure modal closes smoothly
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.viewPlannerText,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      View Planner
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              }
+            />
+          </View>
+        )}
+
+        {/* Error Stage - Invalid Input */}
+        {stage === "error" && invalidMessage && (
           <ScrollView
             style={styles.resultsContainer}
             contentContainerStyle={styles.resultsContent}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
           >
             <Text
               style={[
@@ -805,126 +1024,18 @@ export default function VoiceSuggestions({ visible, onClose }) {
               Based on '{vibeText}'
             </Text>
 
-            {results.map((recipe) => {
-              const isSaved = savedRecipeIds.has(recipe.id);
-              return (
-                <View key={recipe.id} style={styles.recipeCardWrapper}>
-                  <TouchableOpacity
-                    style={styles.recipeCard}
-                    onPress={() => handleRecipePress(recipe)}
-                  >
-                    {recipe.image_url && recipe.image_url.trim() !== "" ? (
-                      <Image
-                        source={{ uri: recipe.image_url }}
-                        style={styles.recipeImage}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={[styles.recipeImage, styles.recipeImagePlaceholder]}>
-                        <ChefHat size={28} color="#FF9F1C" />
-                      </View>
-                    )}
-                    <View style={styles.recipeContent}>
-                      <View style={styles.recipeHeader}>
-                        <View style={styles.matchBadge}>
-                          <Text
-                            style={[
-                              styles.matchText,
-                              { fontFamily: "Inter_600SemiBold" },
-                            ]}
-                          >
-                            {recipe.matchPercentage || 95}% Match
-                          </Text>
-                        </View>
-                        <ArrowRight size={20} color="#666666" />
-                      </View>
-                      <Text
-                        style={[
-                          styles.recipeName,
-                          { fontFamily: "Inter_600SemiBold" },
-                        ]}
-                      >
-                        {recipe.name}
-                      </Text>
-                      <View style={styles.recipeMeta}>
-                        <View style={styles.metaItem}>
-                          <Clock size={14} color="#666666" />
-                          <Text
-                            style={[
-                              styles.metaText,
-                              { fontFamily: "Inter_400Regular" },
-                            ]}
-                          >
-                            {recipe.cooking_time || 30} min
-                          </Text>
-                        </View>
-                        <View style={styles.metaItem}>
-                          {recipe.dietary_info ? (
-                            <>
-                              <Leaf size={14} color="#666666" />
-                              <Text
-                                style={[
-                                  styles.metaText,
-                                  { fontFamily: "Inter_400Regular" },
-                                ]}
-                              >
-                                {recipe.dietary_info}
-                              </Text>
-                            </>
-                          ) : (
-                            <>
-                              <ChefHat size={14} color="#666666" />
-                              <Text
-                                style={[
-                                  styles.metaText,
-                                  { fontFamily: "Inter_400Regular" },
-                                ]}
-                              >
-                                {recipe.difficulty || "Easy"}
-                              </Text>
-                            </>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                  
-                  {/* Keep Recipe Button */}
-                  {!isSaved ? (
-                    <TouchableOpacity
-                      style={styles.keepRecipeButton}
-                      onPress={(e) => handleKeepRecipe(recipe, e)}
-                    >
-                      <Save size={16} color="#FF9F1C" />
-                      <Text
-                        style={[
-                          styles.keepRecipeButtonText,
-                          { fontFamily: "Inter_600SemiBold" },
-                        ]}
-                      >
-                        Keep Recipe (Generated)
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.keepRecipeButton, styles.keepRecipeButtonSaved]}
-                      onPress={() => handleRecipePress(recipe)}
-                    >
-                      <Check size={16} color="#FFFFFF" />
-                      <Text
-                        style={[
-                          styles.keepRecipeButtonText,
-                          styles.keepRecipeButtonTextSaved,
-                          { fontFamily: "Inter_600SemiBold" },
-                        ]}
-                      >
-                        Saved
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
+            <View style={styles.errorCard}>
+              <Text
+                style={[styles.errorTitle, { fontFamily: "Inter_700Bold" }]}
+              >
+                Oops!
+              </Text>
+              <Text
+                style={[styles.errorMessage, { fontFamily: "Inter_400Regular" }]}
+              >
+                {invalidMessage}
+              </Text>
+            </View>
 
             <View style={styles.resultsActions}>
               <TouchableOpacity
@@ -939,28 +1050,6 @@ export default function VoiceSuggestions({ visible, onClose }) {
                   ]}
                 >
                   Try Again
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.viewPlannerButton}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  handleCloseButton(); // Close the modal first
-                  // Navigate to meal planning page
-                  setTimeout(() => {
-                    router.push('/meal-planning');
-                  }, 300); // Small delay to ensure modal closes smoothly
-                }}
-              >
-                <Text
-                  style={[
-                    styles.viewPlannerText,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  View Planner
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1278,7 +1367,8 @@ const styles = StyleSheet.create({
   resultsSubtitle: {
     fontSize: 16,
     color: "#666666",
-    marginBottom: 24,
+    marginBottom: 20,
+    paddingTop: 20,
   },
   recipeCardWrapper: {
     marginBottom: 16,
@@ -1500,6 +1590,100 @@ const styles = StyleSheet.create({
   modalConfirmButtonText: {
     fontSize: 16,
     color: "#FFFFFF",
+  },
+  // Error/Invalid Input Styles
+  errorCard: {
+    backgroundColor: "#FFF5F5",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#EF4444",
+  },
+  errorTitle: {
+    fontSize: 20,
+    color: "#DC2626",
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: "#666666",
+    lineHeight: 20,
+  },
+  // Grid Layout Styles
+  gridContent: {
+    paddingHorizontal: CARD_PADDING,
+    paddingTop: 0,
+    paddingBottom: 20,
+  },
+  gridRow: {
+    justifyContent: "space-between",
+    marginBottom: CARD_MARGIN * 2,
+  },
+  gridRecipeCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  gridImageContainer: {
+    position: "relative",
+    width: "100%",
+    height: 180,
+  },
+  gridRecipeImage: {
+    width: "100%",
+    height: "100%",
+  },
+  gridPlaceholderImage: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+  },
+  gridHeartBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  gridRecipeInfo: {
+    padding: 12,
+  },
+  gridRecipeTitle: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 8,
+    minHeight: 44,
+    lineHeight: 20,
+  },
+  gridRecipeMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  gridMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  gridMetaText: {
+    fontSize: 11,
+    color: "#999999",
+  },
+  gridCategoryText: {
+    fontSize: 11,
+    color: "#999999",
   },
 });
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/utils/auth/useAuth";
 import { Alert, Platform } from "react-native";
 import * as Haptics from "expo-haptics";
+import { getApiUrl } from "@/config/api";
 
 const DEFAULT_PREFERENCES = {
   dietType: [],
@@ -32,7 +33,7 @@ export function usePreferences() {
   const loadPreferences = async () => {
     try {
       setLoading(true);
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl(); // Use centralized config
       const response = await fetch(
         `${apiUrl}/api/preferences?userId=${auth.user.id}`
       );
@@ -125,7 +126,7 @@ export function usePreferences() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl(); // Use centralized config
       const response = await fetch(`${apiUrl}/api/preferences`, {
         method: "POST",
         headers: {

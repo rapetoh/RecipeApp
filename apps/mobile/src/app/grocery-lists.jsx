@@ -29,7 +29,6 @@ import {
   CheckCircle,
   Circle,
   Clock,
-  DollarSign,
   ChevronDown,
   History,
   Settings,
@@ -41,6 +40,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
 import { IngredientIcon } from "@/components/IngredientIcon";
+import { getIngredientIcon } from "@/utils/ingredientIcons";
+import { getApiUrl } from "@/config/api";
 
 export default function GroceryListsScreen() {
   const insets = useSafeAreaInsets();
@@ -156,7 +157,7 @@ export default function GroceryListsScreen() {
     queryKey: ["grocery-lists", auth?.user?.id],
     queryFn: async () => {
       try {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const apiUrl = getApiUrl();
       const response = await fetch(
           `${apiUrl}/api/grocery-lists?userId=${auth?.user?.id}`,
       );
@@ -379,7 +380,7 @@ export default function GroceryListsScreen() {
 
   // Get items for selected period
   const selectedPeriodItems = useMemo(() => {
-    if (!selectedPeriod || !selectedPeriod.list) return [];
+    if (!selectedPeriod || !selectedPeriod.list || !selectedPeriod.list.items) return [];
     return parseItems(selectedPeriod.list.items);
   }, [selectedPeriod]);
 
@@ -413,7 +414,7 @@ export default function GroceryListsScreen() {
   // Generate grocery list mutation
   const generateListMutation = useMutation({
     mutationFn: async ({ startDate, endDate }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const periodName = formatPeriodName(new Date(startDate), new Date(endDate));
       const response = await fetch(`${apiUrl}/api/grocery-lists`, {
         method: "POST",
@@ -446,7 +447,7 @@ export default function GroceryListsScreen() {
   // Update grocery list mutation
   const updateListMutation = useMutation({
     mutationFn: async ({ listId, items }) => {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const response = await fetch(`${apiUrl}/api/grocery-lists`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -565,13 +566,6 @@ export default function GroceryListsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     router.push("/grocery-history");
-  };
-
-  const handleBudgetPress = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push("/food-budget");
   };
 
   // Calculate progress for selected period
@@ -718,12 +712,6 @@ export default function GroceryListsScreen() {
                     {progress.percentage}% complete
                   </Text>
               </View>
-              <TouchableOpacity
-                style={styles.budgetButton}
-                onPress={handleBudgetPress}
-              >
-                <DollarSign size={20} color="#22C55E" />
-              </TouchableOpacity>
             </View>
 
             {/* Progress Bar */}
@@ -745,15 +733,6 @@ export default function GroceryListsScreen() {
                 {progress.percentage}%
               </Text>
             </View>
-
-            {/* Budget Summary */}
-            <View style={styles.budgetSummary}>
-              <Text
-                style={[styles.budgetText, { fontFamily: "Inter_500Medium" }]}
-              >
-                Estimated cost: ${(selectedPeriod.estimatedCost || 0).toFixed(2)}
-              </Text>
-            </View>
             </View>
 
             {/* Grocery Items */}
@@ -764,7 +743,6 @@ export default function GroceryListsScreen() {
                 const itemName = item?.name || "Unknown Item";
                 const itemAmount = item?.amount || 0;
                 const itemUnit = item?.unit || "";
-                const itemPrice = Number(item?.estimated_price) || 0;
 
                 return (
                 <TouchableOpacity
@@ -797,15 +775,25 @@ export default function GroceryListsScreen() {
                       )}
                     </View>
                     {(() => {
-                      const iconData = getIngredientIcon(itemName);
-                      return (
-                        <Image
-                          source={{ uri: iconData.imageUrl }}
-                          style={styles.itemImage}
-                          contentFit="cover"
-                          defaultSource={{ uri: iconData.fallbackUrl }}
-                        />
-                      );
+                      try {
+                        const iconData = getIngredientIcon(itemName);
+                        return (
+                          <Image
+                            source={{ uri: iconData.imageUrl }}
+                            style={styles.itemImage}
+                            contentFit="cover"
+                            defaultSource={{ uri: iconData.fallbackUrl }}
+                          />
+                        );
+                      } catch (error) {
+                        console.error("Error getting ingredient icon:", error);
+                        // Fallback to a default icon or empty view
+                        return (
+                          <View style={[styles.itemImage, { backgroundColor: "#F0F0F0", justifyContent: "center", alignItems: "center" }]}>
+                            <ShoppingCart size={20} color="#999999" />
+                          </View>
+                        );
+                      }
                     })()}
                     <View style={styles.itemInfo}>
                       <Text
@@ -827,17 +815,6 @@ export default function GroceryListsScreen() {
                           {itemAmount} {itemUnit}
                       </Text>
                     </View>
-                  </View>
-                  <View style={styles.itemRight}>
-                    <Text
-                      style={[
-                        styles.itemPrice,
-                        { fontFamily: "Inter_500Medium" },
-                          isChecked && styles.itemPriceChecked,
-                      ]}
-                    >
-                        ${itemPrice.toFixed(2)}
-                    </Text>
                   </View>
                 </TouchableOpacity>
                 );
@@ -962,8 +939,7 @@ export default function GroceryListsScreen() {
                               period.isPast && styles.periodStatsPast,
                             ]}
                           >
-                            {period.checkedItems} of {period.totalItems} items checked •{" "}
-                            ${(period.estimatedCost || 0).toFixed(2)}
+                            {period.checkedItems} of {period.totalItems} items checked
                           </Text>
                           <View style={styles.periodMeta}>
                             <View
@@ -1243,14 +1219,6 @@ const styles = StyleSheet.create({
     color: "#666666",
     marginTop: 2,
   },
-  budgetButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F0FDF4",
-    justifyContent: "center",
-    alignItems: "center",
-  },
 
   // Progress Bar
   progressBarContainer: {
@@ -1275,20 +1243,6 @@ const styles = StyleSheet.create({
     color: "#22C55E",
     minWidth: 40,
     textAlign: "right",
-  },
-
-  // Budget Summary
-  budgetSummary: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 20,
-  },
-  budgetText: {
-    fontSize: 16,
-    color: "#000000",
-    textAlign: "center",
   },
 
   // Items
@@ -1336,16 +1290,6 @@ const styles = StyleSheet.create({
   },
   itemQuantityChecked: {
     color: "#999999",
-  },
-  itemRight: {
-    alignItems: "flex-end",
-  },
-  itemPrice: {
-    fontSize: 16,
-    color: "#000000",
-  },
-  itemPriceChecked: {
-    color: "#666666",
   },
 
   // No List Section

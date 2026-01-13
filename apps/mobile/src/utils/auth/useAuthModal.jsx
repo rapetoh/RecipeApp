@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { useCallback, useMemo } from 'react';
 import { AuthWebView } from './AuthWebView';
 import { useAuthStore, useAuthModal } from './store';
+import { getApiUrl } from '@/config/api';
 
 
 /**
@@ -12,7 +13,7 @@ import { useAuthStore, useAuthModal } from './store';
 export const AuthModal = () => {
   const { isOpen, mode } = useAuthModal();
   const { auth } = useAuthStore();
-  const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+  const baseURL = getApiUrl();
   
   if (!baseURL) {
     return null;

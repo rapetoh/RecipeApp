@@ -79,9 +79,11 @@ function RootLayoutContent() {
             <Stack.Screen name="account/signup" />
             {/* Explicitly register routes to ensure they're recognized */}
             <Stack.Screen name="my-recipes" />
+            <Stack.Screen name="my-recipes/[id]" />
             <Stack.Screen name="recipe-form" />
             <Stack.Screen name="recipe-detail" />
             <Stack.Screen name="food-recognition" />
+            <Stack.Screen name="ingredients-to-recipes" />
             <Stack.Screen name="meal-planning" />
             <Stack.Screen name="preferences" />
             <Stack.Screen name="cooking-mode" />

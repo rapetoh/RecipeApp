@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import { getApiUrl } from "@/config/api";
 
 /**
  * Hook to check if user needs onboarding.
@@ -17,7 +18,7 @@ export function useOnboardingStatus() {
       if (!auth?.user?.id) return null;
       
       try {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+        const apiUrl = getApiUrl(); // Use centralized config instead of env var directly
         
         // Debug logging to verify what URL is being used
         console.log('🔍 [DEBUG] useOnboardingStatus API check:', {

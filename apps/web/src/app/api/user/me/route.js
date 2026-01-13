@@ -87,7 +87,7 @@ export async function GET(request) {
     // Get user stats
     const [recipeCount, favoriteCount] = await Promise.all([
       sql`SELECT COUNT(*) as count FROM recipes WHERE creator_user_id = ${userId}::uuid AND creator_type = 'user'`,
-      sql`SELECT COUNT(*) as count FROM saved_recipes WHERE user_id = ${userId}::uuid`,
+      sql`SELECT COUNT(*) as count FROM recipe_favorites WHERE user_id = ${userId}::uuid`,
     ]);
 
     return Response.json({

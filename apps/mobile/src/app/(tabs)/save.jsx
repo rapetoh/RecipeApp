@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Platform,
   TextInput,
+  Dimensions,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -18,11 +20,17 @@ import {
   Inter_500Medium,
   Inter_600SemiBold,
 } from "@expo-google-fonts/inter";
-import { Heart, ChefHat, Search } from "lucide-react-native";
+import { Heart, ChefHat, Search, Clock } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
+import { getApiUrl } from "@/config/api";
+
+const { width: screenWidth } = Dimensions.get("window");
+const CARD_MARGIN = 8;
+const CARD_PADDING = 16;
+const recipeCardWidth = (screenWidth - CARD_PADDING * 2 - CARD_MARGIN) / 2;
 
 export default function SavedRecipesScreen() {
   const insets = useSafeAreaInsets();
@@ -30,6 +38,7 @@ export default function SavedRecipesScreen() {
   const { isAuthenticated, signIn, auth } = useAuth();
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -59,7 +68,7 @@ export default function SavedRecipesScreen() {
         throw new Error("User not authenticated");
       }
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5173';
+      const apiUrl = getApiUrl();
       const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
       const response = await fetch(`${apiUrl}/api/recipe-favorites?userId=${auth.user.id}${searchParam}`);
 
@@ -105,20 +114,41 @@ export default function SavedRecipesScreen() {
     refetch();
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const formatTime = (minutes) => {
+    if (!minutes) return "Quick";
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  };
+
+  const getCategory = (recipe) => {
+    if (recipe.category) return recipe.category;
+    if (recipe.cuisine) return recipe.cuisine;
+    return "Recipe";
+  };
+
   if (!fontsLoaded) {
     return null;
   }
 
   const favoritedRecipes = favoritedRecipesData?.data || [];
 
-  const renderRecipeItem = ({ item: recipe }) => {
+  const renderRecipeCard = ({ item: recipe }) => {
     return (
       <TouchableOpacity
-        style={styles.recipeItem}
+        style={[styles.recipeCard, { width: recipeCardWidth }]}
         onPress={() => handleRecipePress(recipe)}
+        activeOpacity={0.7}
       >
         {/* Recipe Image */}
-        <View style={styles.recipeImageContainer}>
+        <View style={styles.imageContainer}>
           {recipe.image_url ? (
             <Image
               source={{ uri: recipe.image_url }}
@@ -131,47 +161,32 @@ export default function SavedRecipesScreen() {
               <ChefHat size={32} color="#CCCCCC" />
             </View>
           )}
-          <View style={styles.favoriteBadge}>
-            <Heart size={16} color="#FFFFFF" fill="#FFFFFF" />
+          
+          {/* Heart Badge */}
+          <View style={styles.heartBadge}>
+            <Heart size={14} color="#FFFFFF" fill="#FFFFFF" />
           </View>
         </View>
 
-        {/* Recipe Content */}
-        <View style={styles.recipeContent}>
+        {/* Recipe Info */}
+        <View style={styles.recipeInfo}>
           <Text
             style={[styles.recipeTitle, { fontFamily: "Inter_600SemiBold" }]}
             numberOfLines={2}
           >
             {recipe.name}
           </Text>
-
-          {recipe.description && (
-            <Text
-              style={[
-                styles.recipeDescription,
-                { fontFamily: "Inter_400Regular" },
-              ]}
-              numberOfLines={2}
-            >
-              {recipe.description}
-            </Text>
-          )}
-
           <View style={styles.recipeMeta}>
-            <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
-              {recipe.cooking_time || 30} mins • {recipe.cuisine || "Global"}
-            </Text>
-            <Text style={[styles.rating, { fontFamily: "Inter_500Medium" }]}>
-              ⭐ {recipe.average_rating || 0}
+            <View style={styles.metaItem}>
+              <Clock size={12} color="#999999" />
+              <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
+                {formatTime(recipe.cooking_time)}
+              </Text>
+            </View>
+            <Text style={[styles.categoryText, { fontFamily: "Inter_400Regular" }]}>
+              {getCategory(recipe)}
             </Text>
           </View>
-
-          <Text style={[styles.savedDate, { fontFamily: "Inter_400Regular" }]}>
-            Favorited{" "}
-            {new Date(
-              recipe.favorited_at || recipe.created_at,
-            ).toLocaleDateString()}
-          </Text>
         </View>
       </TouchableOpacity>
     );
@@ -183,9 +198,11 @@ export default function SavedRecipesScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { fontFamily: "Inter_600SemiBold" }]}>
+        <View style={styles.headerLeft} />
+        <Text style={[styles.headerTitle, { fontFamily: "Inter_600SemiBold" }]}>
           Favorite Recipes
         </Text>
+        <View style={styles.headerRight} />
       </View>
 
       {/* Search Bar */}
@@ -310,27 +327,21 @@ export default function SavedRecipesScreen() {
             </Text>
           </View>
         ) : (
-          <>
-            <View style={styles.statsHeader}>
-              <Text
-                style={[styles.statsText, { fontFamily: "Inter_500Medium" }]}
-              >
-                {favoritedRecipes.length} favorite recipe
-                {favoritedRecipes.length !== 1 ? "s" : ""}
-                {debouncedSearch && ` (filtered)`}
-              </Text>
-            </View>
-
-            <FlatList
-              data={favoritedRecipes}
-              renderItem={renderRecipeItem}
-              keyExtractor={(item, index) => `favorite-recipe-${item.id}-${index}`}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-              onRefresh={refetch}
-              refreshing={isLoading}
-            />
-          </>
+          <FlatList
+            data={favoritedRecipes}
+            renderItem={renderRecipeCard}
+            keyExtractor={(item, index) => `favorite-recipe-${item.id}-${index}`}
+            numColumns={2}
+            contentContainerStyle={[
+              styles.gridContent,
+              { paddingBottom: insets.bottom + 100 },
+            ]}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            }
+          />
         )}
       </View>
     </View>
@@ -343,15 +354,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  title: {
-    fontSize: 24,
+  headerLeft: {
+    width: 38,
+  },
+  headerTitle: {
+    fontSize: 18,
     color: "#000000",
+    flex: 1,
     textAlign: "center",
+  },
+  headerRight: {
+    width: 38,
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -365,6 +386,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 12,
   },
   searchInput: {
     flex: 1,
@@ -373,7 +395,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
   },
   signInState: {
     flex: 1,
@@ -474,17 +495,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#FFFFFF",
   },
-  statsHeader: {
-    paddingVertical: 12,
+  gridContent: {
+    padding: CARD_PADDING,
   },
-  statsText: {
-    fontSize: 14,
-    color: "#666666",
+  row: {
+    justifyContent: "space-between",
+    marginBottom: CARD_MARGIN * 2,
   },
-  recipeItem: {
+  recipeCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    marginBottom: 16,
+    overflow: "hidden",
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
@@ -493,10 +514,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    overflow: "hidden",
+    marginBottom: CARD_MARGIN * 2,
   },
-  recipeImageContainer: {
+  imageContainer: {
     position: "relative",
+    width: "100%",
     height: 180,
   },
   recipeImage: {
@@ -510,48 +532,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  favoriteBadge: {
+  heartBadge: {
     position: "absolute",
     top: 12,
     right: 12,
-    backgroundColor: "#FF9F1C",
-    borderRadius: 20,
-    width: 36,
-    height: 36,
+    backgroundColor: "rgba(255, 159, 28, 0.9)",
+    borderRadius: 16,
+    width: 28,
+    height: 28,
     justifyContent: "center",
     alignItems: "center",
   },
-  recipeContent: {
-    padding: 16,
+  recipeInfo: {
+    padding: 12,
   },
   recipeTitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: "#000000",
     marginBottom: 8,
-    lineHeight: 24,
-  },
-  recipeDescription: {
-    fontSize: 14,
-    color: "#666666",
-    marginBottom: 12,
-    lineHeight: 20,
+    minHeight: 44,
   },
   recipeMeta: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "space-between",
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   metaText: {
-    fontSize: 13,
-    color: "#666666",
-  },
-  rating: {
-    fontSize: 13,
-    color: "#666666",
-  },
-  savedDate: {
     fontSize: 12,
     color: "#999999",
+  },
+  categoryText: {
+    fontSize: 12,
+    color: "#666666",
   },
 });
