@@ -1,6 +1,6 @@
 import sql from "../utils/sql.js";
 import OpenAI from "openai";
-import { validateVoiceInput } from "../utils/openai.js";
+import { validateVoiceInput, safeParseJSON, withRetry } from "../utils/openai.js";
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -563,36 +563,44 @@ Respond with ONLY a JSON object:
       "servings": 4,
       "ingredients": [${unitExamples}],
       "instructions": [{"step": 1, "instruction": "Step details"}],
-      "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5},
+      "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5, "sugar": 8, "sodium": 450, "saturated_fat": 5, "cholesterol": 45, "vitamin_a": 15, "vitamin_c": 20, "calcium": 8, "iron": 12, "potassium": 10},
       "tags": ["quick", "healthy"],
       "estimated_cost": 8.50
     }
   ]
 }`;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an expert nutritionist and chef AI assistant. Generate personalized recipes based on user's voice input and preferences.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    max_tokens: 4000,
-    response_format: { type: "json_object" },
-  });
+  // Wrap OpenAI call AND parsing in retry logic - if JSON is truncated, retry the whole request
+  const parsed = await withRetry(
+    async () => {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an expert nutritionist and chef AI assistant. Generate personalized recipes based on user's voice input and preferences.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        max_tokens: 4000,
+        response_format: { type: "json_object" },
+      });
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error("No response from OpenAI");
-  }
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No response from OpenAI");
+      }
 
-  const parsed = JSON.parse(content);
+      // Parse inside retry - truncated JSON will trigger a retry
+      return safeParseJSON(content, 'voice suggestions');
+    },
+    { maxRetries: 2, context: 'Voice suggestions generation' }
+  );
+
   let recipes = parsed.recipes || [];
   
   // Ensure we have exactly 10 recipes (pad or trim if needed)

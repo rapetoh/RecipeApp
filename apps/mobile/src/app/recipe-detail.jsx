@@ -27,6 +27,7 @@ import {
   Users,
   Star,
   ChefHat,
+  Flame,
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -35,6 +36,7 @@ import { useAuth } from "@/utils/auth/useAuth";
 import { RecipeActionButtons } from "./RecipeActionButtons";
 import { MealPlanModal } from "./MealPlanModal";
 import { IngredientIcon } from "@/components/IngredientIcon";
+import { NutritionSnapshot } from "@/components/NutritionSnapshot";
 import { convertIngredients } from "@/utils/unitConverter";
 import { getApiUrl } from "@/config/api";
 
@@ -540,145 +542,96 @@ export default function RecipeDetailScreen() {
           )}
         </View>
 
-        {/* Recipe Card */}
+        {/* Recipe Card - New Clean Layout */}
         <View style={styles.recipeCard}>
+          {/* Badges Row */}
+          <View style={styles.badgesRow}>
+            {recipe.difficulty && (
+              <View style={[
+                styles.badge,
+                recipe.difficulty === 'easy' && styles.badgeEasy,
+                recipe.difficulty === 'medium' && styles.badgeMedium,
+                recipe.difficulty === 'hard' && styles.badgeHard,
+              ]}>
+                <Text style={[
+                  styles.badgeText,
+                  { fontFamily: "Inter_600SemiBold" },
+                  recipe.difficulty === 'easy' && styles.badgeTextDark,
+                  recipe.difficulty === 'medium' && styles.badgeTextDark,
+                  recipe.difficulty === 'hard' && styles.badgeTextLight,
+                ]}>
+                  {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)}
+                </Text>
+              </View>
+            )}
+            {recipe.category && (
+              <View style={[styles.badge, styles.badgeCategory]}>
+                <Text style={[styles.badgeText, styles.badgeTextCategory, { fontFamily: "Inter_600SemiBold" }]}>
+                  {recipe.category.charAt(0).toUpperCase() + recipe.category.slice(1)}
+                </Text>
+              </View>
+            )}
+            {recipe.cuisine && (
+              <View style={[styles.badge, styles.badgeCuisine]}>
+                <Text style={[styles.badgeText, styles.badgeTextCuisine, { fontFamily: "Inter_400Regular" }]}>
+                  {recipe.cuisine}
+                </Text>
+              </View>
+            )}
+          </View>
+
           {/* Title */}
           <Text style={[styles.recipeTitle, { fontFamily: "Inter_700Bold" }]}>
             {recipe.name}
           </Text>
 
-          {/* Author Line */}
-          <Text style={[styles.authorText, { fontFamily: "Inter_400Regular" }]}>
-            {recipe.cuisine} cuisine
-          </Text>
-
-          {/* Meta Row */}
+          {/* Clean Meta Row: Time | Calories | Servings */}
           <View style={styles.metaRow}>
-            {recipe.cooking_time && (
+            {(recipe.cooking_time || recipe.prep_time) && (
               <View style={styles.metaItem}>
-                <Clock size={19} color="#6C6C6C" />
-                <Text
-                  style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-                >
-                  {recipe.cooking_time} Mins
+                <Clock size={16} color="#6C6C6C" />
+                <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
+                  {(recipe.prep_time || 0) + (recipe.cooking_time || 0)} min
                 </Text>
               </View>
             )}
 
-            <View style={styles.metaItem}>
-              <Layers size={19} color="#6C6C6C" />
-              <Text
-                style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-              >
-                {ingredients.length} Ingredients
-              </Text>
-            </View>
+            {nutrition.calories && (
+              <View style={styles.metaItem}>
+                <Flame size={16} color="#6C6C6C" />
+                <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
+                  {nutrition.calories} kcal
+                </Text>
+              </View>
+            )}
 
             {recipe.servings && (
               <View style={styles.metaItem}>
-                <Users size={19} color="#6C6C6C" />
-                <Text
-                  style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-                >
+                <Users size={16} color="#6C6C6C" />
+                <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
                   {recipe.servings} Servings
                 </Text>
               </View>
             )}
-
-            <View style={styles.metaItem}>
-              <Star size={19} color="#FF9F1C" fill="#FF9F1C" />
-              <Text
-                style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}
-              >
-                {recipe.average_rating || 0}
-              </Text>
-            </View>
           </View>
 
-          {/* Description */}
+          {/* Description - Optional, can be collapsed */}
           {recipe.description && (
             <Text
               style={[styles.descriptionText, { fontFamily: "Inter_400Regular" }]}
+              numberOfLines={3}
             >
               {recipe.description}
             </Text>
           )}
 
-          {/* Difficulty & Time */}
-          {(recipe.difficulty || recipe.prep_time) && (
-            <View style={styles.difficultyRow}>
-              {recipe.difficulty && (
-                <View style={styles.difficultyItem}>
-                  <ChefHat size={16} color="#666666" />
-                  <Text
-                    style={[
-                      styles.difficultyText,
-                      { fontFamily: "Inter_400Regular" },
-                    ]}
-                  >
-                    {recipe.difficulty.charAt(0).toUpperCase() + recipe.difficulty.slice(1)} difficulty
-                  </Text>
-                </View>
-              )}
-              {recipe.prep_time && (
-                <View style={styles.difficultyItem}>
-                  <Text
-                    style={[styles.prepText, { fontFamily: "Inter_400Regular" }]}
-                  >
-                    Prep: {recipe.prep_time} mins
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Nutrition Info */}
-          {nutrition.calories && (
-            <View style={styles.nutritionContainer}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Nutrition (per serving)
-              </Text>
-              <View style={styles.nutritionRow}>
-                <Text
-                  style={[
-                    styles.nutritionItem,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Calories: {nutrition.calories}
-                </Text>
-                <Text
-                  style={[
-                    styles.nutritionItem,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Protein: {nutrition.protein}g
-                </Text>
-                <Text
-                  style={[
-                    styles.nutritionItem,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Carbs: {nutrition.carbs}g
-                </Text>
-                <Text
-                  style={[
-                    styles.nutritionItem,
-                    { fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  Fat: {nutrition.fat}g
-                </Text>
-              </View>
-            </View>
-          )}
+          {/* Nutrition Snapshot */}
+          <NutritionSnapshot 
+            nutrition={nutrition} 
+            servings={recipe.servings || 1}
+            fontFamily="Inter_400Regular"
+            fontFamilyBold="Inter_600SemiBold"
+          />
 
           {/* Ingredients Section */}
           <Text
@@ -838,88 +791,75 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   recipeCard: {
-    paddingTop: 12,
+    paddingTop: 16,
+  },
+  badgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  badgeEasy: {
+    backgroundColor: "#E8F5E9",
+  },
+  badgeMedium: {
+    backgroundColor: "#FFF3E0",
+  },
+  badgeHard: {
+    backgroundColor: "#FFEBEE",
+  },
+  badgeCategory: {
+    backgroundColor: "#E3F2FD",
+  },
+  badgeCuisine: {
+    backgroundColor: "#F5F5F5",
+  },
+  badgeText: {
+    fontSize: 12,
+  },
+  badgeTextDark: {
+    color: "#1A1A1A",
+  },
+  badgeTextLight: {
+    color: "#C62828",
+  },
+  badgeTextCategory: {
+    color: "#1565C0",
+  },
+  badgeTextCuisine: {
+    color: "#666666",
   },
   recipeTitle: {
     fontSize: 24,
-    lineHeight: 29,
+    lineHeight: 30,
     color: "#000000",
-    marginBottom: 10,
-  },
-  aiBadge: {
-    backgroundColor: "#FF9F1C",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginBottom: 10,
-  },
-  aiBadgeText: {
-    fontSize: 12,
-    color: "#FFFFFF",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  authorText: {
-    fontSize: 17,
-    color: "#6C6C6C",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
+    gap: 20,
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 24,
+    gap: 6,
   },
   metaText: {
     fontSize: 14,
     color: "#6C6C6C",
-    marginLeft: 5,
   },
   descriptionText: {
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     color: "#808080",
-    marginBottom: 24,
-  },
-  difficultyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  difficultyItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 20,
-  },
-  difficultyText: {
-    fontSize: 14,
-    color: "#666666",
-    marginLeft: 6,
-    textTransform: "capitalize",
-  },
-  prepText: {
-    fontSize: 14,
-    color: "#666666",
-  },
-  nutritionContainer: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  nutritionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  nutritionItem: {
-    fontSize: 12,
-    color: "#666666",
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 20,

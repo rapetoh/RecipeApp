@@ -8,6 +8,98 @@ const openai = process.env.OPENAI_API_KEY
   : null;
 
 /**
+ * Robust JSON parsing that handles truncated or malformed responses
+ * @param {string} content - The raw content from OpenAI
+ * @param {string} context - Description for error logging
+ * @returns {object} - Parsed JSON object
+ */
+export function safeParseJSON(content, context = 'OpenAI response') {
+  if (!content || typeof content !== 'string') {
+    throw new Error(`Empty or invalid ${context}`);
+  }
+
+  // Try direct parse first
+  try {
+    return JSON.parse(content);
+  } catch (directError) {
+    // Try to extract JSON object from response
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (extractError) {
+      // Continue to array extraction
+    }
+
+    // Try to extract JSON array
+    try {
+      const arrayMatch = content.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        return JSON.parse(arrayMatch[0]);
+      }
+    } catch (arrayError) {
+      // Continue to fallback
+    }
+
+    // Log the error for debugging but throw a user-friendly error
+    console.error(`JSON parsing failed for ${context}:`, {
+      contentLength: content.length,
+      contentPreview: content.substring(0, 200),
+      error: directError.message
+    });
+
+    throw new Error('AI response was incomplete. Please try again.');
+  }
+}
+
+/**
+ * Retry wrapper for OpenAI API calls
+ * @param {Function} apiCall - Async function that makes the API call
+ * @param {object} options - Retry options
+ * @returns {Promise} - Result of the API call
+ */
+export async function withRetry(apiCall, options = {}) {
+  const { maxRetries = 2, initialDelay = 1000, context = 'API call' } = options;
+  
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      lastError = error;
+      
+      // Retry on network errors, timeouts, and truncated/malformed JSON responses
+      const isRetryable = 
+        error.message?.includes('incomplete') ||
+        error.message?.includes('truncated') ||
+        error.message?.includes('Unexpected end of JSON') ||
+        error.message?.includes('Unterminated string') ||
+        error.message?.includes('network') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('fetch failed') ||
+        error.message?.includes('socket hang up') ||
+        error.code === 'ECONNRESET' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ENOTFOUND';
+      
+      if (!isRetryable || attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.log(`${context} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Call OpenAI GPT-4 Vision API for image analysis
  */
 export async function analyzeImageWithVision(imageBase64, contentType = 'image/jpeg') {
@@ -16,15 +108,18 @@ export async function analyzeImageWithVision(imageBase64, contentType = 'image/j
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
             {
-              type: 'text',
-              text: `Analyze this food image and identify the dish. Respond with ONLY a JSON object with these exact fields:
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analyze this food image and identify the dish. Respond with ONLY a JSON object with these exact fields:
 {
   "dish_name": "Name of the main dish",
   "detected_ingredients": ["ingredient1", "ingredient2", "ingredient3"],
@@ -45,28 +140,28 @@ Rules:
 - estimated_time should be cooking time in minutes (15-60)
 - detected_ingredients should list 3-8 main ingredients you can see
 - Only respond with the JSON object, no other text`,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageBase64,
-              },
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageBase64,
+                  },
+                },
+              ],
             },
           ],
-        },
-      ],
-      max_tokens: 500,
-    });
+          max_tokens: 500,
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const cleanJson = jsonMatch ? jsonMatch[0] : content;
-    return JSON.parse(cleanJson);
+        return safeParseJSON(content, 'image analysis');
+      },
+      { maxRetries: 2, context: 'Image analysis' }
+    );
   } catch (error) {
     console.error('OpenAI Vision API error:', error);
     throw error;
@@ -85,15 +180,18 @@ export async function analyzeIngredientsFromImage(imageBase64, contentType = 'im
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
             {
-              type: 'text',
-              text: `Analyze this image of a fridge, pantry, or ingredients. Identify ALL food items and ingredients you can see.
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analyze this image of a fridge, pantry, or ingredients. Identify ALL food items and ingredients you can see.
 
 Respond with ONLY a JSON object with these exact fields:
 {
@@ -109,28 +207,28 @@ Rules:
 - confidence should be between 0.0-1.0 based on image clarity
 - If image is unclear or shows no food items, return empty ingredients array and low confidence
 - Only respond with the JSON object, no other text`,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageBase64,
-              },
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageBase64,
+                  },
+                },
+              ],
             },
           ],
-        },
-      ],
-      max_tokens: 1000,
-    });
+          max_tokens: 1000,
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const cleanJson = jsonMatch ? jsonMatch[0] : content;
-    return JSON.parse(cleanJson);
+        return safeParseJSON(content, 'ingredients analysis');
+      },
+      { maxRetries: 2, context: 'Ingredients image analysis' }
+    );
   } catch (error) {
     console.error('OpenAI Vision API error (ingredients):', error);
     throw error;
@@ -225,7 +323,7 @@ Respond with ONLY a JSON object:
       "servings": 4,
       "ingredients": [${unitExamples}],
       "instructions": [{"step": 1, "instruction": "Step details"}],
-      "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5},
+      "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5, "sugar": 8, "sodium": 450, "saturated_fat": 5, "cholesterol": 45, "vitamin_a": 15, "vitamin_c": 20, "calcium": 8, "iron": 12, "potassium": 10},
       "tags": ["quick", "healthy"],
       "estimated_cost": 8.50
     }
@@ -234,52 +332,34 @@ Respond with ONLY a JSON object:
 
 You MUST return exactly 10 recipes.`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'system',
-        content: 'You are an expert nutritionist and chef AI assistant. Generate recipes based on available ingredients.',
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    max_tokens: 8000, // Increased to handle 10 complete recipes
-    response_format: { type: 'json_object' },
-  });
-
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error('No response from OpenAI');
-  }
-
-  // Extract JSON object from response (handles cases where AI adds extra text or malformed JSON)
-  let parsed;
-  try {
-    // Try direct parse first
-    parsed = JSON.parse(content);
-  } catch (parseError) {
-    // If direct parse fails, try to extract JSON object from response
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const cleanJson = jsonMatch[0];
-        parsed = JSON.parse(cleanJson);
-      } else {
-        throw new Error('No JSON object found in response');
-      }
-    } catch (extractError) {
-      console.error('Failed to parse AI response for generateRecipesFromIngredients:', {
-        contentLength: content.length,
-        contentPreview: content.substring(0, 500), // Log first 500 chars for debugging
-        parseError: parseError.message,
-        extractError: extractError.message
+  // Wrap API call AND parsing in retry - truncated JSON triggers retry
+  const parsed = await withRetry(
+    async () => {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert nutritionist and chef AI assistant. Generate recipes based on available ingredients.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        max_tokens: 8000,
+        response_format: { type: 'json_object' },
       });
-      throw new Error('Failed to parse AI-generated recipes. The response may have been truncated or malformed.');
-    }
-  }
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No response from OpenAI');
+      }
+
+      return safeParseJSON(content, 'recipes from ingredients');
+    },
+    { maxRetries: 2, context: 'Recipes from ingredients generation' }
+  );
 
   let recipes = parsed.recipes || [];
   
@@ -304,12 +384,15 @@ export async function validateFoodInput(input) {
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: `Is "${input}" a valid food or recipe name? 
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: `Is "${input}" a valid food or recipe name? 
 
 Respond with ONLY a JSON object:
 {
@@ -321,18 +404,21 @@ Rules:
 - Return isValid: false if it's clearly not food (e.g., "Poop", "Car", "Table")
 - Return isValid: true if it could be a food name, even if misspelled or incomplete (e.g., "Potat", "Pizza", "Chicken Curry")
 - Be lenient - if there's any chance it's food-related, return true`,
-        },
-      ],
-      max_tokens: 150,
-      response_format: { type: 'json_object' },
-    });
+            },
+          ],
+          max_tokens: 150,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    return JSON.parse(content);
+        return safeParseJSON(content, 'food validation');
+      },
+      { maxRetries: 1, context: 'Food input validation' }
+    );
   } catch (error) {
     console.error('OpenAI validation error:', error);
     // Default to valid if validation fails (don't block users)
@@ -351,12 +437,15 @@ export async function validateVoiceInput(input) {
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: `Is this user request food or recipe-related? "${input}"
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: `Is this user request food or recipe-related? "${input}"
 
 Respond with ONLY a JSON object:
 {
@@ -370,18 +459,21 @@ Rules:
 - Return isValid: false if it's clearly NOT food-related (e.g., "I want to fuck", "Car", "Table", sexual content, violence)
 - Return isValid: false if it's inappropriate, offensive, or has nothing to do with food/recipes
 - Be lenient - accept natural language questions and requests about food`,
-        },
-      ],
-      max_tokens: 150,
-      response_format: { type: 'json_object' },
-    });
+            },
+          ],
+          max_tokens: 150,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    return JSON.parse(content);
+        return safeParseJSON(content, 'voice validation');
+      },
+      { maxRetries: 1, context: 'Voice input validation' }
+    );
   } catch (error) {
     console.error('OpenAI voice validation error:', error);
     // Default to valid if validation fails (don't block users)
@@ -400,12 +492,15 @@ export async function classifyInputSpecificity(input) {
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: `Is "${input}" a specific, complete dish name (like "Pizza Sausage", "Chicken Tikka Masala") or an ambiguous/incomplete search term (like "Potat", "Chicken", "Pasta")?
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: `Is "${input}" a specific, complete dish name (like "Pizza Sausage", "Chicken Tikka Masala") or an ambiguous/incomplete search term (like "Potat", "Chicken", "Pasta")?
 
 Respond with ONLY a JSON object:
 {
@@ -417,18 +512,21 @@ Rules:
 - isSpecific: true if it's a complete, specific dish name (e.g., "Pizza Sausage", "Beef Stroganoff")
 - isSpecific: false if it's incomplete, ambiguous, or too generic (e.g., "Potat", "Chicken", "Pasta", "Soup")
 - confidence: How confident you are (0.0-1.0)`,
-        },
-      ],
-      max_tokens: 150,
-      response_format: { type: 'json_object' },
-    });
+            },
+          ],
+          max_tokens: 150,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    return JSON.parse(content);
+        return safeParseJSON(content, 'input classification');
+      },
+      { maxRetries: 1, context: 'Input specificity classification' }
+    );
   } catch (error) {
     console.error('OpenAI classification error:', error);
     // Default to ambiguous if classification fails
@@ -522,7 +620,17 @@ Respond with ONLY a JSON object:
         "calories": 350,
         "protein": 20,
         "carbs": 25,
-        "fat": 15
+        "fat": 15,
+        "fiber": 5,
+        "sugar": 8,
+        "sodium": 450,
+        "saturated_fat": 5,
+        "cholesterol": 45,
+        "vitamin_a": 15,
+        "vitamin_c": 20,
+        "calcium": 8,
+        "iron": 12,
+        "potassium": 10
       }
     }
   ]
@@ -530,47 +638,30 @@ Respond with ONLY a JSON object:
 
 Generate exactly ${neededCount} unique recipes. Make them realistic, authentic, and related to "${input}". Only use real, traditional recipes that actually exist - do not invent new combinations.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 2000,
-      response_format: { type: 'json_object' },
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
-
-    // Extract JSON object from response (handles cases where AI adds extra text or malformed JSON)
-    let parsed;
-    try {
-      // Try direct parse first
-      parsed = JSON.parse(content);
-    } catch (parseError) {
-      // If direct parse fails, try to extract JSON object from response
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const cleanJson = jsonMatch[0];
-          parsed = JSON.parse(cleanJson);
-        } else {
-          throw new Error('No JSON object found in response');
-        }
-      } catch (extractError) {
-        console.error('Failed to parse AI response:', {
-          content: content.substring(0, 500), // Log first 500 chars for debugging
-          parseError: parseError.message,
-          extractError: extractError.message
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    const parsed = await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          max_tokens: 2000,
+          response_format: { type: 'json_object' },
         });
-        throw new Error('Failed to parse AI-generated suggestions');
-      }
-    }
+
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
+
+        return safeParseJSON(content, 'ambiguous suggestions');
+      },
+      { maxRetries: 2, context: 'Suggestions generation' }
+    );
 
     return parsed.suggestions || [];
   } catch (error) {
@@ -676,7 +767,16 @@ Respond with ONLY a JSON object:
     "protein": 20,
     "carbs": 25,
     "fat": 15,
-    "fiber": 5
+    "fiber": 5,
+    "sugar": 8,
+    "sodium": 450,
+    "saturated_fat": 5,
+    "cholesterol": 45,
+    "vitamin_a": 15,
+    "vitamin_c": 20,
+    "calcium": 8,
+    "iron": 12,
+    "potassium": 10
   },
   "prep_time": 15,
   "cooking_time": 25,
@@ -685,24 +785,30 @@ Respond with ONLY a JSON object:
 
 Make it realistic and delicious. Include 6-10 ingredients and 4-8 clear steps.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 1500,
-      response_format: { type: 'json_object' },
-    });
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          max_tokens: 1500,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    return JSON.parse(content);
+        return safeParseJSON(content, 'generated recipe');
+      },
+      { maxRetries: 2, context: 'Recipe generation' }
+    );
   } catch (error) {
     console.error('OpenAI GPT API error:', error);
     throw error;
@@ -913,7 +1019,16 @@ Respond with ONLY a JSON object in this exact format:
         "protein": 20,
         "carbs": 25,
         "fat": 15,
-        "fiber": 5
+        "fiber": 5,
+        "sugar": 8,
+        "sodium": 450,
+        "saturated_fat": 5,
+        "cholesterol": 45,
+        "vitamin_a": 15,
+        "vitamin_c": 20,
+        "calcium": 8,
+        "iron": 12,
+        "potassium": 10
       },
       "tags": ["healthy", "quick", "vegetarian"],
       "estimated_cost": 8.50
@@ -929,28 +1044,34 @@ Make sure:
 - Include varied cuisines based on their preferences
 - Recipes are realistic, delicious, and match their skill level`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert nutritionist and chef AI assistant specializing in personalized recipe generation. Always respect dietary restrictions and create diverse, appealing recipes.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 4000,
-      response_format: { type: 'json_object' },
-    });
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    const parsed = await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert nutritionist and chef AI assistant specializing in personalized recipe generation. Always respect dietary restrictions and create diverse, appealing recipes.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          max_tokens: 4000,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    const parsed = JSON.parse(content);
+        return safeParseJSON(content, 'today suggestions');
+      },
+      { maxRetries: 2, context: 'Today suggestions generation' }
+    );
     
     // Validate that we have recipes
     if (!parsed.recipes || !Array.isArray(parsed.recipes) || parsed.recipes.length === 0) {
@@ -991,16 +1112,19 @@ export async function getRecipeRecommendation(userProfile, recentMeals, candidat
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert nutritionist and chef AI assistant. Your job is to recommend the perfect recipe for a user based on their preferences, dietary restrictions, cooking history, and the time of day.`,
-        },
-        {
-          role: 'user',
-          content: `Please recommend a recipe for ${userProfile.name || 'the user'} for their ${mealType} today.
+    // Wrap API call AND parsing in retry - truncated JSON triggers retry
+    return await withRetry(
+      async () => {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an expert nutritionist and chef AI assistant. Your job is to recommend the perfect recipe for a user based on their preferences, dietary restrictions, cooking history, and the time of day.`,
+            },
+            {
+              role: 'user',
+              content: `Please recommend a recipe for ${userProfile.name || 'the user'} for their ${mealType} today.
 
 User Profile:
 - Diet type: ${userProfile.diet_type?.join(', ') || 'No specific diet'}
@@ -1044,18 +1168,21 @@ Respond with ONLY a JSON object:
   "confidence": 0.85,
   "meal_type": "${mealType}"
 }`,
-        },
-      ],
-      max_tokens: 1000,
-      response_format: { type: 'json_object' },
-    });
+            },
+          ],
+          max_tokens: 1000,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
+        const content = response.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
+        }
 
-    return JSON.parse(content);
+        return safeParseJSON(content, 'recipe recommendation');
+      },
+      { maxRetries: 2, context: 'Recipe recommendation' }
+    );
   } catch (error) {
     console.error('OpenAI Recommendation API error:', error);
     throw error;

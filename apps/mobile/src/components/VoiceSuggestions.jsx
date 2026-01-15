@@ -41,6 +41,47 @@ const CARD_PADDING = 16;
 const HORIZONTAL_PADDING = 20 + 16; // contentContainer paddingHorizontal + gridContent padding
 const recipeCardWidth = (screenWidth - (HORIZONTAL_PADDING * 2) - CARD_MARGIN) / 2;
 
+/**
+ * Fetch with timeout and automatic retry for network resilience
+ * Handles iOS background/foreground transitions that can break network connections
+ */
+const fetchWithRetry = async (url, options = {}, maxRetries = 2) => {
+  const timeout = 60000; // 60 second timeout for voice processing (AI can be slow)
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      // Check if error is retryable (network issues, timeouts, aborts)
+      const isRetryable = 
+        error.name === 'AbortError' ||
+        error.message?.includes('Network request failed') ||
+        error.message?.includes('network') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('aborted');
+      
+      if (!isRetryable || attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = 1000 * Math.pow(2, attempt);
+      console.log(`🔄 Network request failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
 export default function VoiceSuggestions({ visible, onClose }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -307,9 +348,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
         return;
       }
 
-      // Call API
+      // Call API with retry logic for network resilience
       const apiUrl = getApiUrl();
-      const result = await fetch(`${apiUrl}/api/voice-suggestions`, {
+      const result = await fetchWithRetry(`${apiUrl}/api/voice-suggestions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -384,7 +425,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
       }
     } catch (error) {
       console.error("Error processing voice:", error);
-      Alert.alert("Error", `Failed to process voice input: ${error.message}`);
+      // Provide user-friendly error message for network issues
+      const isNetworkError = 
+        error.message?.includes('Network request failed') ||
+        error.message?.includes('network') ||
+        error.name === 'AbortError';
+      
+      const userMessage = isNetworkError
+        ? "Connection lost. Please check your internet and try again."
+        : `Failed to process voice input: ${error.message}`;
+      
+      Alert.alert("Error", userMessage);
       setStage("listening");
       startRecording();
     }
@@ -407,7 +458,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
       setActiveStep(1);
 
       const apiUrl = getApiUrl();
-      const result = await fetch(`${apiUrl}/api/voice-suggestions`, {
+      const result = await fetchWithRetry(`${apiUrl}/api/voice-suggestions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -479,7 +530,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
       }
     } catch (error) {
       console.error("Error processing text:", error);
-      Alert.alert("Error", `Failed to process request: ${error.message}`);
+      // Provide user-friendly error message for network issues
+      const isNetworkError = 
+        error.message?.includes('Network request failed') ||
+        error.message?.includes('network') ||
+        error.name === 'AbortError';
+      
+      const userMessage = isNetworkError
+        ? "Connection lost. Please check your internet and try again."
+        : `Failed to process request: ${error.message}`;
+      
+      Alert.alert("Error", userMessage);
       setStage("listening");
     }
   };
@@ -674,7 +735,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
       
       // Add to saved_recipes and Generated collection using save-generated endpoint
       // Even though recipe exists, this ensures proper setup
-      const response = await fetch(`${apiUrl}/api/recipes/save-generated`, {
+      const response = await fetchWithRetry(`${apiUrl}/api/recipes/save-generated`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
