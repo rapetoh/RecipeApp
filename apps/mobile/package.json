@@ -46,6 +46,7 @@
     "expo-web-browser": "~14.2.0",
     "isexe": "^3.1.1",
     "lodash": "^4.17.21",
+    "lottie-react-native": "7.2.2",
     "lucide-react-native": "^0.525.0",
     "metro": "0.82.0",
     "metro-config": "0.82.0",

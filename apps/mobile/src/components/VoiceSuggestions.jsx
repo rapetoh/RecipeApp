@@ -30,6 +30,7 @@ import { BlurView } from "expo-blur";
 import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder, Heart } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
+import ErrorState from "@/components/ErrorState";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -1085,35 +1086,12 @@ export default function VoiceSuggestions({ visible, onClose }) {
               Based on '{vibeText}'
             </Text>
 
-            <View style={styles.errorCard}>
-              <Text
-                style={[styles.errorTitle, { fontFamily: "Inter_700Bold" }]}
-              >
-                Oops!
-              </Text>
-              <Text
-                style={[styles.errorMessage, { fontFamily: "Inter_400Regular" }]}
-              >
-                {invalidMessage}
-              </Text>
-            </View>
-
-            <View style={styles.resultsActions}>
-              <TouchableOpacity
-                style={styles.tryAgainButton}
-                onPress={handleTryAgain}
-              >
-                <Mic size={18} color="#FF9F1C" />
-                <Text
-                  style={[
-                    styles.tryAgainText,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  Try Again
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <ErrorState
+              title="Oops!"
+              message={invalidMessage}
+              onRetry={handleTryAgain}
+              retryText="Try Again"
+            />
           </ScrollView>
         )}
           </BottomSheetView>
@@ -1651,25 +1629,6 @@ const styles = StyleSheet.create({
   modalConfirmButtonText: {
     fontSize: 16,
     color: "#FFFFFF",
-  },
-  // Error/Invalid Input Styles
-  errorCard: {
-    backgroundColor: "#FFF5F5",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
-  },
-  errorTitle: {
-    fontSize: 20,
-    color: "#DC2626",
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: "#666666",
-    lineHeight: 20,
   },
   // Grid Layout Styles
   gridContent: {

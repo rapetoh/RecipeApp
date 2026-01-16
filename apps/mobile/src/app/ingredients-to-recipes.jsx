@@ -31,6 +31,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
+import ErrorState from "@/components/ErrorState";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -531,29 +532,12 @@ export default function IngredientsToRecipesScreen() {
       {/* Error Stage */}
       {stage === "error" && (
         <View style={styles.errorContainer}>
-          <View style={styles.errorCard}>
-            <Text style={[styles.errorTitle, { fontFamily: "Inter_700Bold" }]}>
-              Oops!
-            </Text>
-            <Text
-              style={[styles.errorMessage, { fontFamily: "Inter_400Regular" }]}
-            >
-              {errorMessage}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.tryAgainButton}
-            onPress={handleTryAgain}
-          >
-            <Text
-              style={[
-                styles.tryAgainText,
-                { fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
-              Try Again
-            </Text>
-          </TouchableOpacity>
+          <ErrorState
+            title="Oops!"
+            message={errorMessage}
+            onRetry={handleTryAgain}
+            retryText="Try Again"
+          />
         </View>
       )}
     </View>
@@ -765,26 +749,8 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    padding: 20,
     justifyContent: "center",
-  },
-  errorCard: {
-    backgroundColor: "#FFF5F5",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
-  },
-  errorTitle: {
-    fontSize: 20,
-    color: "#DC2626",
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: "#666666",
-    lineHeight: 20,
+    paddingHorizontal: 4,
   },
   tryAgainButton: {
     backgroundColor: "#FF9F1C",

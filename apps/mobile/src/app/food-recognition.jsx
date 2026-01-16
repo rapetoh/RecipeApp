@@ -43,6 +43,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
+import ErrorState from "@/components/ErrorState";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -888,21 +889,10 @@ export default function FoodRecognitionScreen() {
         {/* Invalid Input Message */}
         {searchResultType === "invalid" && invalidMessage && (
           <View style={styles.resultsContainer}>
-            <View style={styles.errorCard}>
-              <Text
-                style={[styles.errorTitle, { fontFamily: "Inter_700Bold" }]}
-              >
-                Oops!
-              </Text>
-              <Text
-                style={[styles.errorMessage, { fontFamily: "Inter_400Regular" }]}
-              >
-                {invalidMessage}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.tryAgainButton}
-              onPress={() => {
+            <ErrorState
+              title="Oops!"
+              message={invalidMessage}
+              onRetry={() => {
                 setSearchResultType(null);
                 setInvalidMessage("");
                 setSearchText("");
@@ -911,16 +901,8 @@ export default function FoodRecognitionScreen() {
                   setSelectedImage(null);
                 }
               }}
-            >
-              <Text
-                style={[
-                  styles.tryAgainText,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Try Another {activeMode === "scan" ? "Photo" : "Search"}
-              </Text>
-            </TouchableOpacity>
+              retryText={`Try Another ${activeMode === "scan" ? "Photo" : "Search"}`}
+            />
           </View>
         )}
 
@@ -2127,24 +2109,5 @@ const styles = StyleSheet.create({
   tryAgainText: {
     color: "#000000",
     fontSize: 14,
-  },
-  // Error/Invalid Input Styles
-  errorCard: {
-    backgroundColor: "#FFF5F5",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#EF4444",
-  },
-  errorTitle: {
-    fontSize: 20,
-    color: "#DC2626",
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: "#666666",
-    lineHeight: 20,
   },
 });

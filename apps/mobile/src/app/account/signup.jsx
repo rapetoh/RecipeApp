@@ -365,7 +365,7 @@ export default function SignUpScreen() {
 
           {/* Terms */}
           <Text style={[styles.termsText, { fontFamily: "Inter_400Regular" }]}>
-            By continuing, you agree to ChefVibe's{"\n"}
+            By continuing, you agree to PocketChef's{"\n"}
             <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
             <Text style={styles.termsLink}>Privacy Policy</Text>.
           </Text>

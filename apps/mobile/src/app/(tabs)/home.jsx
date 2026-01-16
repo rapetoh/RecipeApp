@@ -28,6 +28,7 @@ import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Menu, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
+import LottieView from "lottie-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
 import VoiceSuggestions from "@/components/VoiceSuggestions";
 import { getApiUrl } from "@/config/api";
@@ -563,8 +564,17 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.voiceButtonGlow} />
-              <View style={styles.voiceButtonInner}>
-                <Mic size={isSmallScreen ? 28 : 32} color="#FFFFFF" />
+              <View style={[styles.voiceButtonInner, { overflow: 'hidden' }]}>
+                <LottieView
+                  source={require("@/assets/chef-animation.lottie")}
+                  autoPlay
+                  loop
+                  speed={0.25}
+                  style={{
+                    width: isSmallScreen ? 70 : 80,
+                    height: isSmallScreen ? 70 : 80,
+                  }}
+                />
               </View>
             </TouchableOpacity>
             <Text
