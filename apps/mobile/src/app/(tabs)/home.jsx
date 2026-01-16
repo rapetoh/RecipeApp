@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  AppState,
 } from "react-native";
 import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
@@ -47,6 +48,27 @@ export default function HomeScreen() {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedRecipePosition, setSelectedRecipePosition] = useState({ x: 0, y: 0 });
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Real-time clock update - updates every minute and when app returns to foreground
+  useEffect(() => {
+    // Update immediately when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        setCurrentTime(new Date());
+      }
+    });
+
+    // Update every minute
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+
+    return () => {
+      clearInterval(interval);
+      subscription?.remove();
+    };
+  }, []);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -157,16 +179,16 @@ export default function HomeScreen() {
     router.push("/(tabs)/profile");
   };
 
-  // Get time-based greeting and meal time
+  // Get time-based greeting and meal time (uses currentTime state for real-time updates)
   const getTimeBasedGreeting = () => {
-    const hour = new Date().getHours();
+    const hour = currentTime.getHours();
     if (hour < 12) return "Good morning";
     if (hour < 17) return "Good afternoon";
     return "Good evening";
   };
 
   const getMealTime = () => {
-    const hour = new Date().getHours();
+    const hour = currentTime.getHours();
     if (hour >= 5 && hour < 11) return "Breakfast time";
     if (hour >= 11 && hour < 15) return "Lunch time";
     if (hour >= 15 && hour < 21) return "Dinner time";
@@ -174,9 +196,8 @@ export default function HomeScreen() {
   };
 
   const getCurrentTime = () => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
+    const hours = currentTime.getHours();
+    const minutes = currentTime.getMinutes();
     const ampm = hours >= 12 ? "PM" : "AM";
     const displayHours = hours % 12 || 12;
     const displayMinutes = minutes.toString().padStart(2, "0");
@@ -358,7 +379,7 @@ export default function HomeScreen() {
         }} 
       />
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="light" backgroundColor="transparent" />
+        <StatusBar style="dark" backgroundColor="transparent" />
 
       {/* Header */}
       <View style={styles.header}>
