@@ -25,6 +25,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/config/api";
+import IngredientPreview from "@/components/IngredientPreview";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -250,6 +251,12 @@ export function RecipeSelectionModal({
                         source={{ uri: recipe.image_url }}
                         style={styles.recipeImage}
                         resizeMode="cover"
+                      />
+                    ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+                      <IngredientPreview 
+                        ingredients={recipe.ingredients} 
+                        recipeId={recipe.id}
+                        maxItems={6}
                       />
                     ) : (
                       <View style={styles.recipeImagePlaceholder}>

@@ -32,6 +32,7 @@ import {
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import ErrorState from "@/components/ErrorState";
+import IngredientPreview from "@/components/IngredientPreview";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -313,6 +314,12 @@ export default function IngredientsToRecipesScreen() {
               style={styles.recipeImage}
               contentFit="cover"
               transition={200}
+            />
+          ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+            <IngredientPreview 
+              ingredients={recipe.ingredients} 
+              recipeId={recipe.id || recipe.name}
+              maxItems={6}
             />
           ) : (
             <View style={styles.placeholderImage}>

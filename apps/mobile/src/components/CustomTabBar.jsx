@@ -83,7 +83,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
       style={[
         styles.blurContainer, 
         { 
-          bottom: 8 + insets.bottom, // Add gap from bottom for floating effect
+          bottom: insets.bottom > 0 ? insets.bottom - 10 : 4, // Closer to bottom, respecting safe area
           marginHorizontal: 12, // Add horizontal margins for floating effect
         }
       ]}
@@ -92,8 +92,8 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
         {tabs.map((tab) => {
           const IconComponent = tab.icon;
           const active = isActive(tab);
-          const iconColor = active ? "#000000" : "rgba(0, 0, 0, 0.5)";
-          const labelColor = active ? "#000000" : "rgba(0, 0, 0, 0.5)";
+          const iconColor = active ? "#FF9F1C" : "rgba(0, 0, 0, 0.4)";
+          const labelColor = active ? "#1A1A1A" : "rgba(0, 0, 0, 0.4)";
 
           return (
             <TouchableOpacity
@@ -103,8 +103,10 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
               activeOpacity={0.6}
             >
               <View style={styles.tabContent}>
-                <IconComponent size={22} color={iconColor} />
-                <Text style={[styles.tabLabel, { color: labelColor }]}>
+                <View style={[styles.iconContainer, active && styles.iconContainerActive]}>
+                  <IconComponent size={22} color={iconColor} />
+                </View>
+                <Text style={[styles.tabLabel, { color: labelColor }, active && styles.tabLabelActive]}>
                   {tab.title}
                 </Text>
               </View>
@@ -154,12 +156,24 @@ const styles = StyleSheet.create({
   tabContent: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 2,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconContainerActive: {
+    backgroundColor: "rgba(255, 159, 28, 0.15)",
   },
   tabLabel: {
     fontSize: 11,
     fontWeight: "500",
-    marginTop: 2,
+  },
+  tabLabelActive: {
+    fontWeight: "600",
   },
 });
 

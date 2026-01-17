@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -131,42 +132,53 @@ export default function SignUpScreen() {
     return null;
   }
 
-  // Email form view
+  // Email form view - Modern design with gradient header
   if (showEmailForm) {
     return (
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         
-        {/* Header with back button */}
-        <View style={[styles.emailHeader, { paddingTop: insets.top + 10 }]}>
+        {/* Orange Gradient Header */}
+        <LinearGradient
+          colors={["#FF9F1C", "#FF8C00"]}
+          style={[styles.emailGradientHeader, { paddingTop: insets.top + 20 }]}
+        >
+          {/* Back Button */}
           <TouchableOpacity
-            style={styles.backButton}
+            style={styles.emailBackButton}
             onPress={() => setShowEmailForm(false)}
           >
-            <Ionicons name="arrow-back" size={24} color="#333" />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={[styles.emailHeaderTitle, { fontFamily: "Inter_600SemiBold" }]}>
-            Create Account
+          
+          {/* Chef Icon */}
+          <View style={styles.emailIconContainer}>
+            <Image
+              source={require("../../../assets/images/icon.png")}
+              style={styles.emailChefIcon}
+              contentFit="contain"
+            />
+          </View>
+
+          {/* Title */}
+          <Text style={[styles.emailGradientTitle, { fontFamily: "Inter_700Bold" }]}>
+            Create your account
           </Text>
-          <View style={styles.backButton} />
-        </View>
+          <Text style={[styles.emailGradientSubtitle, { fontFamily: "Inter_400Regular" }]}>
+            Enter your details below
+          </Text>
+        </LinearGradient>
 
-        <ScrollView
-          contentContainerStyle={styles.emailScrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.emailFormContainer}>
-            <Text style={[styles.emailFormTitle, { fontFamily: "Inter_700Bold" }]}>
-              Sign up with Email
-            </Text>
-            <Text style={[styles.emailFormSubtitle, { fontFamily: "Inter_400Regular" }]}>
-              Enter your details to create your account
-            </Text>
-
+        {/* White Content Area */}
+        <View style={styles.emailContentContainer}>
+          <ScrollView
+            contentContainerStyle={styles.emailModernScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {error && (
               <View style={styles.errorContainer}>
                 <Ionicons name="alert-circle" size={18} color="#DC2626" />
@@ -248,8 +260,15 @@ export default function SignUpScreen() {
                 </Text>
               )}
             </TouchableOpacity>
-          </View>
-        </ScrollView>
+
+            {/* Terms Text */}
+            <Text style={[styles.termsText, { fontFamily: "Inter_400Regular" }]}>
+              By creating an account, you agree to our{" "}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     );
   }
@@ -266,9 +285,11 @@ export default function SignUpScreen() {
       >
         {/* Chef Icon */}
         <View style={styles.iconContainer}>
-          <View style={styles.iconBackground}>
-            <Ionicons name="restaurant" size={32} color="#FF9F1C" />
-          </View>
+          <Image
+            source={require("../../../assets/images/icon.png")}
+            style={styles.chefIcon}
+            contentFit="contain"
+          />
         </View>
 
         {/* Title */}
@@ -390,6 +411,11 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 24,
+  },
+  chefIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
   },
   iconBackground: {
     width: 72,
@@ -616,5 +642,52 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     color: "#FFFFFF",
+  },
+  // Modern Email Form Styles (with gradient header)
+  emailGradientHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+  },
+  emailBackButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  emailIconContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  emailChefIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 18,
+  },
+  emailGradientTitle: {
+    fontSize: 24,
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  emailGradientSubtitle: {
+    fontSize: 15,
+    color: "rgba(255, 255, 255, 0.9)",
+    textAlign: "center",
+  },
+  emailContentContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    marginTop: -20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  emailModernScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 40,
   },
 });

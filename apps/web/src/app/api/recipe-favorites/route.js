@@ -42,7 +42,8 @@ export async function GET(request) {
           rf.id as favorite_id, rf.created_at as favorited_at,
           r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
           r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
-          r.tags, r.average_rating, r.rating_count, r.estimated_cost
+          r.tags, r.average_rating, r.rating_count, r.estimated_cost,
+          r.ingredients
         FROM recipe_favorites rf
         JOIN recipes r ON rf.recipe_id = r.id
         WHERE rf.user_id = ${userId}::uuid
@@ -73,7 +74,8 @@ export async function GET(request) {
           rf.id as favorite_id, rf.created_at as favorited_at,
           r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time, 
           r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
-          r.tags, r.average_rating, r.rating_count, r.estimated_cost
+          r.tags, r.average_rating, r.rating_count, r.estimated_cost,
+          r.ingredients
         FROM recipe_favorites rf
         JOIN recipes r ON rf.recipe_id = r.id
         WHERE rf.user_id = ${userId}::uuid

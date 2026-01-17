@@ -89,12 +89,13 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Get recipes in collection
+    // Get recipes in collection (including ingredients for preview)
     const recipes = await sql`
       SELECT 
         r.id, r.name, r.description, r.category, r.cuisine, r.cooking_time,
         r.prep_time, r.difficulty, r.servings, r.image_url, r.nutrition,
         r.tags, r.average_rating, r.rating_count, r.estimated_cost,
+        r.ingredients,
         cr.added_at, cr.display_order, cr.notes
       FROM collection_recipes cr
       JOIN recipes r ON cr.recipe_id = r.id

@@ -72,6 +72,7 @@ export default function OnboardingNotificationsScreen() {
   const requestNotificationPermission = async () => {
     if (Platform.OS === "web") {
       // Web doesn't support push notifications the same way
+      setNotificationPermissionAsked(true);
       return;
     }
 
@@ -80,6 +81,14 @@ export default function OnboardingNotificationsScreen() {
       
       if (existingStatus === "granted") {
         setNotificationPermissionAsked(true);
+        // Try to get push token, but don't fail if it doesn't work
+        try {
+          const token = await Notifications.getExpoPushTokenAsync();
+          console.log("Push token:", token.data);
+        } catch (tokenError) {
+          // Silently ignore - likely missing entitlement in dev build
+          console.log("Could not get push token (expected in dev builds without entitlement)");
+        }
         return;
       }
 
@@ -87,12 +96,23 @@ export default function OnboardingNotificationsScreen() {
       setNotificationPermissionAsked(true);
       
       if (status === "granted") {
-        // Get the push token for future use (can be saved to backend)
-        const token = await Notifications.getExpoPushTokenAsync();
-        console.log("Notification permission granted. Push token:", token.data);
+        // Try to get push token, but don't fail if it doesn't work
+        try {
+          const token = await Notifications.getExpoPushTokenAsync();
+          console.log("Notification permission granted. Push token:", token.data);
+        } catch (tokenError) {
+          // Silently ignore - likely missing entitlement in dev build
+          console.log("Could not get push token (expected in dev builds without entitlement)");
+        }
       }
     } catch (error) {
-      console.error("Error requesting notification permission:", error);
+      // Handle missing entitlement gracefully - don't show error to user
+      // This happens when the app is built without push notification capability
+      if (error.message?.includes("aps-environment")) {
+        console.log("Push notifications not available (missing entitlement in build)");
+      } else {
+        console.log("Notification permission not available:", error.message);
+      }
       setNotificationPermissionAsked(true);
     }
   };

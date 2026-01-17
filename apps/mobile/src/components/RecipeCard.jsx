@@ -7,6 +7,7 @@ import {
   Inter_600SemiBold,
 } from "@expo-google-fonts/inter";
 import { Heart, Clock, ChefHat } from "lucide-react-native";
+import IngredientPreview from "./IngredientPreview";
 
 export default function RecipeCard({ recipe, cardWidth, onPress }) {
   const [fontsLoaded] = useFonts({
@@ -34,6 +35,12 @@ export default function RecipeCard({ recipe, cardWidth, onPress }) {
             style={styles.image}
             contentFit="cover"
             transition={200}
+          />
+        ) : recipe.ingredientsList && recipe.ingredientsList.length > 0 ? (
+          <IngredientPreview 
+            ingredients={recipe.ingredientsList} 
+            recipeId={recipe.id}
+            maxItems={6}
           />
         ) : (
           <View style={styles.placeholderContainer}>

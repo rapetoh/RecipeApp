@@ -31,6 +31,7 @@ import { Mic, X, ChefHat, Clock, Leaf, ArrowRight, Save, Check, Folder, Heart } 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import ErrorState from "@/components/ErrorState";
+import IngredientPreview from "@/components/IngredientPreview";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -590,6 +591,12 @@ export default function VoiceSuggestions({ visible, onClose }) {
               style={styles.gridRecipeImage}
               contentFit="cover"
               transition={200}
+            />
+          ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+            <IngredientPreview 
+              ingredients={recipe.ingredients} 
+              recipeId={recipe.id || recipe.name}
+              maxItems={6}
             />
           ) : (
             <View style={styles.gridPlaceholderImage}>

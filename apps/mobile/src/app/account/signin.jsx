@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -151,9 +152,11 @@ export default function SignInScreen() {
       >
         {/* Chef Icon */}
         <View style={styles.iconContainer}>
-          <View style={styles.iconBackground}>
-            <Ionicons name="restaurant" size={28} color="#FF9F1C" />
-          </View>
+          <Image
+            source={require("../../../assets/images/icon.png")}
+            style={styles.chefIcon}
+            contentFit="contain"
+          />
         </View>
 
         {/* Title */}
@@ -331,6 +334,11 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 20,
+  },
+  chefIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
   },
   iconBackground: {
     width: 64,

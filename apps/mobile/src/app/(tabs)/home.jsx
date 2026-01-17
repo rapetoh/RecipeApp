@@ -13,8 +13,10 @@ import {
   Modal,
   Pressable,
   AppState,
+  ImageBackground,
 } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -118,6 +120,52 @@ export default function HomeScreen() {
       enabled: !!auth?.user?.id,
       staleTime: 1000 * 60 * 30, // 30 minutes
     });
+
+  // Fetch today's meal plan
+  const todayDateString = currentTime.toISOString().split('T')[0];
+  const { data: todayMealPlan } = useQuery({
+    queryKey: ["today-meal-plan", auth?.user?.id, todayDateString],
+    queryFn: async () => {
+      if (!auth?.user?.id) return null;
+      try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(
+          `${apiUrl}/api/meal-plans?userId=${auth.user.id}&startDate=${todayDateString}&endDate=${todayDateString}`
+        );
+        if (!response.ok) return null;
+        const result = await response.json();
+        if (result.success && result.data) {
+          // Organize by meal type
+          const meals = { breakfast: null, lunch: null, dinner: null, snack: null };
+          result.data.forEach((meal) => {
+            if (meals[meal.meal_type] === null) {
+              meals[meal.meal_type] = {
+                id: meal.recipe_id,
+                name: meal.recipe_name,
+                cookingTime: meal.cooking_time,
+              };
+            }
+          });
+          return meals;
+        }
+        return null;
+      } catch (error) {
+        console.error("Error fetching today's meal plan:", error);
+        return null;
+      }
+    },
+    enabled: !!auth?.user?.id && isAuthenticated,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Get current meal type based on time
+  const getCurrentMealType = () => {
+    const hour = currentTime.getHours();
+    if (hour >= 5 && hour < 11) return "breakfast";
+    if (hour >= 11 && hour < 15) return "lunch";
+    if (hour >= 15 && hour < 21) return "dinner";
+    return "snack";
+  };
 
 
   // Accept recommendation mutation
@@ -491,68 +539,157 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Food Recognition Banner */}
-        <View style={styles.promoBanner}>
-          <View style={styles.promoContent}>
-            <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold" }]}>
-              Identify Any Dish
-            </Text>
-            <Text
-              style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
-            >
-              Use a photo or type any dish name to get a recipe.
-            </Text>
-            <TouchableOpacity
-              style={styles.promoButton}
-              onPress={handleFoodRecognitionPress}
-            >
-              <Text style={styles.promoButtonIcon}>⚡</Text>
-              <Text
-                style={[
-                  styles.promoButtonText,
-                  { fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                Get instant Recipe
+        {/* Today's Menu Section */}
+        {isAuthenticated && todayMealPlan && (todayMealPlan.breakfast || todayMealPlan.lunch || todayMealPlan.dinner || todayMealPlan.snack) && (
+          <View style={styles.todayMenuSection}>
+            <View style={styles.todayMenuHeader}>
+              <Text style={[styles.todayMenuTitle, { fontFamily: "Inter_700Bold" }]}>
+                Today's Menu
               </Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/meal-planning")}>
+                <Text style={[styles.todayMenuViewPlan, { fontFamily: "Inter_600SemiBold" }]}>
+                  View Plan
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.todayMenuScroll}
+            >
+              {["breakfast", "lunch", "dinner", "snack"].map((mealType) => {
+                const meal = todayMealPlan[mealType];
+                const isCurrentMeal = getCurrentMealType() === mealType;
+                const mealLabels = {
+                  breakfast: "BREAKFAST",
+                  lunch: "LUNCH",
+                  dinner: "DINNER",
+                  snack: "SNACK",
+                };
+                
+                if (!meal) return null;
+                
+                return (
+                  <TouchableOpacity
+                    key={mealType}
+                    style={[
+                      styles.todayMealCard,
+                      isCurrentMeal && styles.todayMealCardActive,
+                    ]}
+                    onPress={() => router.push(`/recipe-detail?id=${meal.id}`)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.todayMealHeader}>
+                      <Text style={[
+                        styles.todayMealType,
+                        { fontFamily: "Inter_600SemiBold" },
+                        isCurrentMeal && styles.todayMealTypeActive,
+                      ]}>
+                        {mealLabels[mealType]}
+                      </Text>
+                      {isCurrentMeal && (
+                        <View style={styles.todayMealCheck}>
+                          <Text style={styles.todayMealCheckIcon}>✓</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text 
+                      style={[styles.todayMealName, { fontFamily: "Inter_500Medium" }]}
+                      numberOfLines={2}
+                    >
+                      {meal.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-          <View style={styles.promoIcon}>
-            <Text style={styles.promoEmoji}>🍜</Text>
-          </View>
-        </View>
+        )}
 
-        {/* Ingredients to Recipes Banner */}
-        {isAuthenticated && (
-          <View style={[styles.promoBanner, { marginTop: isSmallScreen ? 10 : 12, backgroundColor: "#F0F9FF" }]}>
+        {/* Food Recognition Banner */}
+        <ImageBackground
+          source={require("../../../assets/images/dish-banner.jpg")}
+          style={styles.promoBanner}
+          imageStyle={styles.promoBannerImage}
+        >
+          <LinearGradient
+            colors={["rgba(0,0,0,0.85)", "rgba(0,0,0,0.4)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.promoBannerOverlay}
+          >
             <View style={styles.promoContent}>
-              <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold", color: "#000000" }]}>
-                What Can I Cook?
+              <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold" }]}>
+                Identify Any Dish
               </Text>
               <Text
-                style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular", color: "#666666" }]}
+                style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
               >
-                Take a photo of your ingredients and get recipe suggestions.
+                Use a photo or type any dish name to get a recipe.
               </Text>
               <TouchableOpacity
-                style={[styles.promoButton, { backgroundColor: "#0EA5E9" }]}
-                onPress={handleIngredientsToRecipesPress}
+                style={styles.promoButton}
+                onPress={handleFoodRecognitionPress}
               >
-                <Text style={styles.promoButtonIcon}>📸</Text>
+                <Text style={styles.promoButtonIcon}>⚡</Text>
                 <Text
                   style={[
                     styles.promoButtonText,
                     { fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  Scan Ingredients
+                  Get instant Recipe
                 </Text>
               </TouchableOpacity>
             </View>
             <View style={styles.promoIcon}>
-              <Text style={styles.promoEmoji}>🥘</Text>
+              <Text style={styles.promoEmoji}>🍜</Text>
             </View>
-          </View>
+          </LinearGradient>
+        </ImageBackground>
+
+        {/* Ingredients to Recipes Banner */}
+        {isAuthenticated && (
+          <ImageBackground
+            source={require("../../../assets/images/ingredients-banner.jpg")}
+            style={[styles.promoBanner, { marginTop: isSmallScreen ? 10 : 12 }]}
+            imageStyle={styles.promoBannerImage}
+          >
+            <LinearGradient
+              colors={["rgba(0,0,0,0.85)", "rgba(0,0,0,0.4)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.promoBannerOverlay}
+            >
+              <View style={styles.promoContent}>
+                <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold" }]}>
+                  What Can I Cook?
+                </Text>
+                <Text
+                  style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
+                >
+                  Take a photo of your ingredients and get recipe suggestions.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.promoButton, { backgroundColor: "#0EA5E9" }]}
+                  onPress={handleIngredientsToRecipesPress}
+                >
+                  <Text style={styles.promoButtonIcon}>📸</Text>
+                  <Text
+                    style={[
+                      styles.promoButtonText,
+                      { fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
+                    Scan Ingredients
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.promoIcon}>
+                <Text style={styles.promoEmoji}>🥘</Text>
+              </View>
+            </LinearGradient>
+          </ImageBackground>
         )}
 
         {/* Voice Suggestions Section - Replaces Today's Suggestions */}
@@ -571,8 +708,8 @@ export default function HomeScreen() {
                   loop
                   speed={0.25}
                   style={{
-                    width: isSmallScreen ? 70 : 80,
-                    height: isSmallScreen ? 70 : 80,
+                    width: isSmallScreen ? 50 : 58,
+                    height: isSmallScreen ? 50 : 58,
                   }}
                 />
               </View>
@@ -809,10 +946,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   promoBanner: {
-    backgroundColor: "#000000",
-    borderRadius: 12,
-    padding: isSmallScreen ? 16 : 18,
-    marginTop: isSmallScreen ? 12 : 16,
+    borderRadius: 14,
+    marginTop: isSmallScreen ? 8 : 12,
+    overflow: "hidden",
+  },
+  promoBannerImage: {
+    borderRadius: 16,
+  },
+  promoBannerOverlay: {
+    padding: isSmallScreen ? 14 : 16,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -854,47 +996,47 @@ const styles = StyleSheet.create({
     fontSize: isSmallScreen ? 32 : 40,
   },
   voiceSection: {
-    marginTop: 16,
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 8,
     alignItems: "center",
-    paddingVertical: 24,
+    paddingVertical: isSmallScreen ? 12 : 16,
   },
   voiceButton: {
-    width: isSmallScreen ? 100 : 120,
-    height: isSmallScreen ? 100 : 120,
+    width: isSmallScreen ? 70 : 80,
+    height: isSmallScreen ? 70 : 80,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: isSmallScreen ? 16 : 20,
+    marginBottom: isSmallScreen ? 8 : 12,
     position: "relative",
   },
   voiceButtonGlow: {
     position: "absolute",
-    width: isSmallScreen ? 120 : 140,
-    height: isSmallScreen ? 120 : 140,
-    borderRadius: isSmallScreen ? 60 : 70,
+    width: isSmallScreen ? 85 : 95,
+    height: isSmallScreen ? 85 : 95,
+    borderRadius: isSmallScreen ? 43 : 48,
     backgroundColor: "#FF9F1C",
     opacity: 0.3,
   },
   voiceButtonInner: {
-    width: isSmallScreen ? 80 : 100,
-    height: isSmallScreen ? 80 : 100,
-    borderRadius: isSmallScreen ? 40 : 50,
+    width: isSmallScreen ? 60 : 70,
+    height: isSmallScreen ? 60 : 70,
+    borderRadius: isSmallScreen ? 30 : 35,
     backgroundColor: "#FF9F1C",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#FF9F1C",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 6,
+    elevation: 6,
   },
   voiceTitle: {
-    fontSize: isSmallScreen ? 20 : 24,
+    fontSize: isSmallScreen ? 16 : 18,
     color: "#000000",
-    marginBottom: isSmallScreen ? 4 : 6,
+    marginBottom: isSmallScreen ? 2 : 4,
   },
   voiceExample: {
-    fontSize: isSmallScreen ? 14 : 16,
+    fontSize: isSmallScreen ? 12 : 13,
     color: "#666666",
     textAlign: "center",
     fontStyle: "italic",
@@ -957,5 +1099,72 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#F0F0F0",
     marginVertical: 4,
+  },
+  // Today's Menu Styles
+  todayMenuSection: {
+    marginTop: isSmallScreen ? 10 : 14,
+  },
+  todayMenuHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  todayMenuTitle: {
+    fontSize: isSmallScreen ? 16 : 18,
+    color: "#1A1A1A",
+  },
+  todayMenuViewPlan: {
+    fontSize: 14,
+    color: "#FF9F1C",
+  },
+  todayMenuScroll: {
+    paddingRight: 16,
+    gap: 12,
+  },
+  todayMealCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 120,
+    maxWidth: 140,
+    borderWidth: 1.5,
+    borderColor: "#E8E8E8",
+  },
+  todayMealCardActive: {
+    borderColor: "#FF9F1C",
+    backgroundColor: "#FFFAF5",
+  },
+  todayMealHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  todayMealType: {
+    fontSize: 11,
+    color: "#888888",
+    letterSpacing: 0.5,
+  },
+  todayMealTypeActive: {
+    color: "#FF9F1C",
+  },
+  todayMealCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FF9F1C",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  todayMealCheckIcon: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  todayMealName: {
+    fontSize: 14,
+    color: "#1A1A1A",
+    lineHeight: 18,
   },
 });

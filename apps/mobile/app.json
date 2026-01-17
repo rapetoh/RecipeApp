@@ -2,20 +2,19 @@
   "expo": {
     "name": "PocketChef",
     "slug": "recipe-app",
-    "scheme": "recipeapp",
+    "scheme": "pocketchef",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFFFFF",
+      "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rapetoh.recipeapp",
+      "bundleIdentifier": "com.rapetoh.pocketchef",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app needs access to your camera to take photos of food for recipe recognition.",
@@ -31,7 +30,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.rapetoh.recipeapp",
+      "package": "com.rapetoh.pocketchef",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
@@ -46,9 +45,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain"
+          "backgroundColor": "#FFFFFF"
         }
       ],
       "expo-camera"

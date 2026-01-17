@@ -39,6 +39,7 @@ import { IngredientIcon } from "@/components/IngredientIcon";
 import { NutritionSnapshot } from "@/components/NutritionSnapshot";
 import { convertIngredients } from "@/utils/unitConverter";
 import { getApiUrl } from "@/config/api";
+import IngredientPreview from "@/components/IngredientPreview";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -535,6 +536,14 @@ export default function RecipeDetailScreen() {
               />
               {carouselImages.length > 1 && renderDotIndicator(carouselImages)}
             </>
+          ) : recipe?.ingredients && recipe.ingredients.length > 0 ? (
+            <View style={styles.placeholderContainer}>
+              <IngredientPreview 
+                ingredients={recipe.ingredients} 
+                recipeId={recipe.id}
+                maxItems={6}
+              />
+            </View>
           ) : (
             <View style={styles.placeholderContainer}>
               <ChefHat size={60} color="#FF9F1C" />

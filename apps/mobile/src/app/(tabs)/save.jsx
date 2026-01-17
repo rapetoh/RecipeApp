@@ -24,6 +24,7 @@ import { Heart, ChefHat, Search, Clock } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
+import IngredientPreview from "@/components/IngredientPreview";
 import * as Haptics from "expo-haptics";
 import { getApiUrl } from "@/config/api";
 
@@ -155,6 +156,12 @@ export default function SavedRecipesScreen() {
               style={styles.recipeImage}
               contentFit="cover"
               transition={200}
+            />
+          ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+            <IngredientPreview 
+              ingredients={recipe.ingredients} 
+              recipeId={recipe.id}
+              maxItems={6}
             />
           ) : (
             <View style={styles.placeholderImage}>

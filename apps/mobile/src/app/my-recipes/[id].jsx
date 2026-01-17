@@ -37,6 +37,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/utils/auth/useAuth";
 import { getApiUrl } from "@/config/api";
+import IngredientPreview from "@/components/IngredientPreview";
 
 const { width: screenWidth } = Dimensions.get("window");
 const CARD_MARGIN = 8;
@@ -250,6 +251,12 @@ export default function CollectionDetailScreen() {
               source={{ uri: recipe.image_url }}
               style={styles.recipeImage}
               contentFit="cover"
+            />
+          ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+            <IngredientPreview 
+              ingredients={recipe.ingredients} 
+              recipeId={recipe.id}
+              maxItems={6}
             />
           ) : (
             <View style={styles.placeholderImage}>
