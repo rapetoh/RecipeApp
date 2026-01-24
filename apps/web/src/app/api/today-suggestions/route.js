@@ -1,5 +1,6 @@
 import sql from "../utils/sql.js";
 import { generateTodaySuggestions } from "../utils/openai.js";
+import { checkFeatureAccess, trackFeatureUsage } from "../utils/subscription.js";
 
 // Helper function to generate suggestions for a date (can be called async in background)
 async function generateSuggestionsForDate(userId, date) {
@@ -204,6 +205,20 @@ export async function GET(request) {
       return Response.json(
         { success: false, error: "User ID is required" },
         { status: 400 },
+      );
+    }
+
+    // Check feature access (subscription gating)
+    const accessCheck = await checkFeatureAccess(userId, 'today_suggestions');
+    if (!accessCheck.hasAccess) {
+      return Response.json(
+        { 
+          success: false, 
+          error: accessCheck.reason || "Feature access denied",
+          requiresUpgrade: true,
+          usage: accessCheck.usage,
+        },
+        { status: 403 }
       );
     }
 
@@ -541,6 +556,9 @@ export async function GET(request) {
         { status: 500 },
       );
     }
+
+    // Track feature usage (only when new suggestions are generated, not cached)
+    await trackFeatureUsage(userId, 'today_suggestions');
 
     return Response.json({
       success: true,

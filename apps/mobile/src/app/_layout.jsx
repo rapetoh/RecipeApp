@@ -97,6 +97,8 @@ function RootLayoutContent() {
             <Stack.Screen name="grocery-lists" />
             <Stack.Screen name="grocery-history" />
             <Stack.Screen name="edit-profile" />
+            <Stack.Screen name="subscription/plans" />
+            <Stack.Screen name="subscription/success" />
           </Stack>
         </GestureHandlerRootView>
       </QueryClientProvider>

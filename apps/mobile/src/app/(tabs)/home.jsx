@@ -29,10 +29,12 @@ import {
 import { useRouter, Stack } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Menu, Camera, Settings, Heart, X, Mic } from "lucide-react-native";
+import { Menu, Camera, Settings, Heart, X, Mic, BarChart3 } from "lucide-react-native";
 import LottieView from "lottie-react-native";
 import { useAuth } from "@/utils/auth/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
 import VoiceSuggestions from "@/components/VoiceSuggestions";
+import UsageOverviewModal from "@/components/UsageOverviewModal";
 import { getApiUrl } from "@/config/api";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -47,10 +49,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auth, isAuthenticated, signIn } = useAuth();
+  const { hasPremiumAccess } = useSubscription();
   const [longPressModalVisible, setLongPressModalVisible] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedRecipePosition, setSelectedRecipePosition] = useState({ x: 0, y: 0 });
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [usageModalVisible, setUsageModalVisible] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Real-time clock update - updates every minute and when app returns to foreground
@@ -449,6 +453,20 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
+        {isAuthenticated && !hasPremiumAccess && (
+          <TouchableOpacity
+            style={styles.usageButton}
+            onPress={() => {
+              setUsageModalVisible(true);
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <BarChart3 size={20} color="#FF9F1C" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -740,6 +758,12 @@ export default function HomeScreen() {
         onClose={() => setVoiceModalVisible(false)}
       />
 
+      {/* Usage Overview Modal */}
+      <UsageOverviewModal
+        visible={usageModalVisible}
+        onClose={() => setUsageModalVisible(false)}
+      />
+
       {/* Long Press Modal for Quick Actions */}
       <Modal
         visible={longPressModalVisible}
@@ -852,6 +876,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+  },
+  usageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF5E6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
   },
   greetingContainer: {
     flex: 1,

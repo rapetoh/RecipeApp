@@ -6,6 +6,7 @@ import {
   generateSuggestionsForAmbiguous 
 } from "../utils/openai.js";
 import { findBestMatch, filterAndSortBySimilarity } from "../utils/similarity.js";
+import { checkFeatureAccess, trackFeatureUsage } from "../utils/subscription.js";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {
@@ -90,6 +91,22 @@ export async function POST(request) {
         { success: false, error: "Dish name is required" },
         { status: 400 },
       );
+    }
+
+    // Check feature access (subscription gating)
+    if (userId) {
+      const accessCheck = await checkFeatureAccess(userId, 'recipe_generation');
+      if (!accessCheck.hasAccess) {
+        return Response.json(
+          { 
+            success: false, 
+            error: accessCheck.reason || "Feature access denied",
+            requiresUpgrade: true,
+            usage: accessCheck.usage,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const trimmedDishName = dishName.trim();
@@ -300,6 +317,11 @@ export async function POST(request) {
         ${false}
       ) RETURNING *
     `;
+
+    // Track feature usage (only when recipe is actually generated)
+    if (userId) {
+      await trackFeatureUsage(userId, 'recipe_generation');
+    }
 
     return Response.json({
       success: true,

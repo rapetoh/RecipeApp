@@ -1,6 +1,7 @@
 import sql from "../utils/sql.js";
 import { analyzeImageWithVision, generateRecipeWithGPT } from "../utils/openai.js";
 import { findBestMatch } from "../utils/similarity.js";
+import { checkFeatureAccess, trackFeatureUsage } from "../utils/subscription.js";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {
@@ -106,6 +107,22 @@ export async function POST(request) {
         { success: false, error: "Image URL is required" },
         { status: 400 },
       );
+    }
+
+    // Check feature access (subscription gating)
+    if (userId) {
+      const accessCheck = await checkFeatureAccess(userId, 'food_recognition');
+      if (!accessCheck.hasAccess) {
+        return Response.json(
+          { 
+            success: false, 
+            error: accessCheck.reason || "Feature access denied",
+            requiresUpgrade: true,
+            usage: accessCheck.usage,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     console.log("Processing food recognition for image:", imageUrl);
@@ -282,6 +299,11 @@ export async function POST(request) {
     const alternatives = similarRecipes
       .filter((r) => r.id !== generatedRecipe?.id)
       .slice(0, 3);
+
+    // Track feature usage (only after successful recognition)
+    if (userId) {
+      await trackFeatureUsage(userId, 'food_recognition');
+    }
 
     return Response.json({
       success: true,

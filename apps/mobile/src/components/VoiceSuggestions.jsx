@@ -32,6 +32,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import ErrorState from "@/components/ErrorState";
 import IngredientPreview from "@/components/IngredientPreview";
+import UpgradePrompt from "@/components/UpgradePrompt";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -98,6 +99,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [results, setResults] = useState([]);
   const [vibeText, setVibeText] = useState("");
   const [invalidMessage, setInvalidMessage] = useState(""); // Error message for invalid input
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradeUsage, setUpgradeUsage] = useState(null);
   const recordingAttemptedRef = useRef(false);
   const [savedRecipeIds, setSavedRecipeIds] = useState(new Set()); // Track saved recipes
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -369,12 +372,28 @@ export default function VoiceSuggestions({ visible, onClose }) {
         const errorText = await result.text();
         let errorMessage = "Failed to process voice input";
         let errorType = null;
+        let requiresUpgrade = false;
+        let usage = null;
+        
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error || errorMessage;
           errorType = errorData.type;
+          requiresUpgrade = errorData.requiresUpgrade || false;
+          usage = errorData.usage || null;
         } catch (e) {
           errorMessage = `Server error (${result.status})`;
+        }
+        
+        // Handle upgrade required (403)
+        if (result.status === 403 && requiresUpgrade) {
+          setUpgradeUsage(usage);
+          setShowUpgradePrompt(true);
+          setStage("listening");
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }
+          return;
         }
         
         // Handle invalid input (400 with type: "invalid") - show error card instead of alert
@@ -499,6 +518,24 @@ export default function VoiceSuggestions({ visible, onClose }) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
           return;
+        }
+        
+        // Handle upgrade required (403)
+        if (result.status === 403) {
+          try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.requiresUpgrade) {
+              setUpgradeUsage(errorData.usage || null);
+              setShowUpgradePrompt(true);
+              setStage("listening");
+              if (Platform.OS !== "web") {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              }
+              return;
+            }
+          } catch (e) {
+            // Not a JSON response, continue with normal error handling
+          }
         }
         
         console.error("API error:", result.status, errorMessage);
@@ -1034,23 +1071,23 @@ export default function VoiceSuggestions({ visible, onClose }) {
               contentContainerStyle={styles.gridContent}
               showsVerticalScrollIndicator={true}
               ListFooterComponent={
-                <View style={styles.resultsActions}>
-                  <TouchableOpacity
-                    style={styles.tryAgainButton}
-                    onPress={handleTryAgain}
-                  >
-                    <Mic size={18} color="#FF9F1C" />
-                    <Text
-                      style={[
-                        styles.tryAgainText,
-                        { fontFamily: "Inter_600SemiBold" },
-                      ]}
-                    >
-                      Try Again
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.viewPlannerButton}
+            <View style={styles.resultsActions}>
+              <TouchableOpacity
+                style={styles.tryAgainButton}
+                onPress={handleTryAgain}
+              >
+                <Mic size={18} color="#FF9F1C" />
+                <Text
+                  style={[
+                    styles.tryAgainText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Try Again
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.viewPlannerButton}
                     onPress={() => {
                       if (Platform.OS !== "web") {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1061,17 +1098,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
                         router.push('/meal-planning');
                       }, 300); // Small delay to ensure modal closes smoothly
                     }}
-                  >
-                    <Text
-                      style={[
-                        styles.viewPlannerText,
-                        { fontFamily: "Inter_600SemiBold" },
-                      ]}
-                    >
-                      View Planner
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+              >
+                <Text
+                  style={[
+                    styles.viewPlannerText,
+                    { fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  View Planner
+                </Text>
+              </TouchableOpacity>
+            </View>
               }
             />
           </View>
@@ -1233,6 +1270,14 @@ export default function VoiceSuggestions({ visible, onClose }) {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+    
+    {/* Upgrade Prompt */}
+    <UpgradePrompt
+      visible={showUpgradePrompt}
+      onClose={() => setShowUpgradePrompt(false)}
+      feature="voice_suggestions"
+      usage={upgradeUsage}
+    />
     </>
   );
 }

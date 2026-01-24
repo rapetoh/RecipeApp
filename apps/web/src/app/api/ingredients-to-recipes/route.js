@@ -1,5 +1,6 @@
 import sql from "../utils/sql.js";
 import { analyzeIngredientsFromImage, generateRecipesFromIngredients } from "../utils/openai.js";
+import { checkFeatureAccess, trackFeatureUsage } from "../utils/subscription.js";
 
 // Helper function to fetch user preferences
 async function getUserPreferences(userId) {
@@ -101,6 +102,22 @@ export async function POST(request) {
         { success: false, error: "Image URL is required" },
         { status: 400 }
       );
+    }
+
+    // Check feature access (subscription gating)
+    if (userId) {
+      const accessCheck = await checkFeatureAccess(userId, 'ingredients_to_recipes');
+      if (!accessCheck.hasAccess) {
+        return Response.json(
+          { 
+            success: false, 
+            error: accessCheck.reason || "Feature access denied",
+            requiresUpgrade: true,
+            usage: accessCheck.usage,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     console.log("Processing ingredients-to-recipes for image:", imageUrl);
@@ -245,6 +262,11 @@ export async function POST(request) {
 
     // Sort by match percentage (recipes using more detected ingredients first)
     recipesWithScores.sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+    // Track feature usage (only after successful generation)
+    if (userId) {
+      await trackFeatureUsage(userId, 'ingredients_to_recipes');
+    }
 
     return Response.json({
       success: true,

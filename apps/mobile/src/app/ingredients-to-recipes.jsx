@@ -33,6 +33,7 @@ import {
 import { useRouter } from "expo-router";
 import ErrorState from "@/components/ErrorState";
 import IngredientPreview from "@/components/IngredientPreview";
+import UpgradePrompt from "@/components/UpgradePrompt";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -59,6 +60,8 @@ export default function IngredientsToRecipesScreen() {
   const [stage, setStage] = useState("select"); // select, processing, results, error
   const [errorMessage, setErrorMessage] = useState("");
   const [savedRecipeIds, setSavedRecipeIds] = useState(new Set());
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradeUsage, setUpgradeUsage] = useState(null);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -91,6 +94,16 @@ export default function IngredientsToRecipesScreen() {
         return data; // Return to onSuccess to handle gracefully
       }
 
+      // Handle upgrade required (403)
+      if (response.status === 403 && data.requiresUpgrade) {
+        setUpgradeUsage(data.usage || null);
+        setShowUpgradePrompt(true);
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        throw new Error("Upgrade required");
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to process ingredients");
       }
@@ -121,6 +134,10 @@ export default function IngredientsToRecipesScreen() {
       }
     },
     onError: (error) => {
+      // Skip error display if upgrade is required (upgrade prompt already shown)
+      if (error.message === "Upgrade required") {
+        return;
+      }
       console.error("Processing error:", error);
       setStage("error");
       setErrorMessage(
@@ -547,6 +564,14 @@ export default function IngredientsToRecipesScreen() {
           />
         </View>
       )}
+
+      {/* Upgrade Prompt */}
+      <UpgradePrompt
+        visible={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+        feature="ingredients_to_recipes"
+        usage={upgradeUsage}
+      />
     </View>
   );
 }

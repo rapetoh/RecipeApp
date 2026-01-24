@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -29,17 +29,24 @@ import {
   Star,
   ShoppingCart,
   Edit,
+  Sparkles,
+  BarChart3,
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/utils/auth/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useQuery } from "@tanstack/react-query";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import UsageOverviewModal from "@/components/UsageOverviewModal";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { auth, isAuthenticated, signIn, signOut } = useAuth();
+  const { hasPremiumAccess, isLoadingStatus } = useSubscription();
+  const [usageModalVisible, setUsageModalVisible] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -251,7 +258,123 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
-        ) : (
+        ) : null}
+
+        {/* Usage Overview Card - Only for free users */}
+        {isAuthenticated && !hasPremiumAccess && (
+          <View style={styles.usageCard}>
+            <TouchableOpacity
+              style={styles.usageCardContent}
+              onPress={() => {
+                setUsageModalVisible(true);
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.usageCardLeft}>
+                <View style={styles.usageIconContainer}>
+                  <BarChart3 size={20} color="#FF9F1C" />
+                </View>
+                <View style={styles.usageTextContainer}>
+                  <Text style={[styles.usageCardTitle, { fontFamily: "Inter_600SemiBold" }]}>
+                    Your Usage This Month
+                  </Text>
+                  <Text style={[styles.usageCardSubtitle, { fontFamily: "Inter_400Regular" }]}>
+                    Tap to view details
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.usageArrow}>›</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Subscription Section */}
+        {isAuthenticated && (
+          <View style={styles.subscriptionSection}>
+            {hasPremiumAccess ? (
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumHeader}>
+                  <View style={styles.premiumBadge}>
+                    <Star size={16} color="#FF9F1C" fill="#FF9F1C" />
+                    <Text
+                      style={[styles.premiumBadgeText, { fontFamily: "Inter_600SemiBold" }]}
+                    >
+                      Premium
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[styles.premiumTitle, { fontFamily: "Inter_700Bold" }]}
+                >
+                  You're a Premium Member
+                </Text>
+                <Text
+                  style={[styles.premiumSubtitle, { fontFamily: "Inter_400Regular" }]}
+                >
+                  Enjoy unlimited access to all AI features
+                </Text>
+                <TouchableOpacity
+                  style={styles.manageButton}
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }
+                    router.push("/subscription/plans");
+                  }}
+                >
+                  <Text
+                    style={[styles.manageButtonText, { fontFamily: "Inter_600SemiBold" }]}
+                  >
+                    Manage Subscription
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.upgradeCard}
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }
+                  router.push("/subscription/plans");
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={["#FF9F1C", "#FF8C00"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.upgradeGradient}
+                >
+                  <View style={styles.upgradeContent}>
+                    <View style={styles.upgradeIcon}>
+                      <Sparkles size={24} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.upgradeTextContainer}>
+                      <Text
+                        style={[styles.upgradeTitle, { fontFamily: "Inter_700Bold" }]}
+                      >
+                        Upgrade to Premium
+                      </Text>
+                      <Text
+                        style={[styles.upgradeSubtitle, { fontFamily: "Inter_400Regular" }]}
+                      >
+                        Unlock unlimited AI recipes & features
+                      </Text>
+                    </View>
+                    <Text style={styles.upgradeArrow}>›</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Sign In Section */}
+        {!isAuthenticated && (
           <View style={styles.signInSection}>
             <View style={styles.signInIcon}>
               <User size={48} color="#999999" />
@@ -361,6 +484,12 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Usage Overview Modal */}
+      <UsageOverviewModal
+        visible={usageModalVisible}
+        onClose={() => setUsageModalVisible(false)}
+      />
     </View>
   );
 }
@@ -545,5 +674,155 @@ const styles = StyleSheet.create({
   appInfoText: {
     fontSize: 12,
     color: "#999999",
+  },
+  subscriptionSection: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  premiumCard: {
+    backgroundColor: "#FFF5E6",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#FF9F1C",
+  },
+  premiumHeader: {
+    marginBottom: 12,
+  },
+  premiumBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  premiumBadgeText: {
+    fontSize: 12,
+    color: "#FF9F1C",
+    letterSpacing: 0.5,
+  },
+  premiumTitle: {
+    fontSize: 20,
+    color: "#000000",
+    marginBottom: 6,
+  },
+  premiumSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  manageButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: "#FF9F1C",
+    alignItems: "center",
+  },
+  manageButtonText: {
+    fontSize: 16,
+    color: "#FF9F1C",
+  },
+  upgradeCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#FF9F1C",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  upgradeGradient: {
+    padding: 20,
+  },
+  upgradeContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  upgradeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  upgradeTextContainer: {
+    flex: 1,
+  },
+  upgradeTitle: {
+    fontSize: 18,
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  upgradeSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+    lineHeight: 20,
+  },
+  upgradeArrow: {
+    fontSize: 24,
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  usageCard: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  usageCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  usageCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  usageIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF5E6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  usageTextContainer: {
+    flex: 1,
+  },
+  usageCardTitle: {
+    fontSize: 15,
+    color: "#000000",
+    marginBottom: 2,
+  },
+  usageCardSubtitle: {
+    fontSize: 13,
+    color: "#666666",
+  },
+  usageArrow: {
+    fontSize: 24,
+    color: "#CCCCCC",
+    marginLeft: 8,
   },
 });

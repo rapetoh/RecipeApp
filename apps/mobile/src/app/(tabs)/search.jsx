@@ -93,7 +93,7 @@ export default function MyRecipesScreen() {
   });
 
   const collections = collectionsData?.data || [];
-
+  
   // Filter collections by search
   const filteredCollections = collections.filter((collection) =>
     collection.name.toLowerCase().includes(searchText.toLowerCase())
@@ -312,17 +312,17 @@ export default function MyRecipesScreen() {
           <Text style={[styles.loadingText, { fontFamily: "Inter_400Regular" }]}>Loading...</Text>
         </View>
       ) : isEmpty ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <BookOpen size={48} color="#CCCCCC" />
-          </View>
-          <Text style={[styles.emptyTitle, { fontFamily: "Inter_700Bold" }]}>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <BookOpen size={48} color="#CCCCCC" />
+            </View>
+            <Text style={[styles.emptyTitle, { fontFamily: "Inter_700Bold" }]}>
             No Collections Yet
-          </Text>
+            </Text>
           <Text style={[styles.emptySubtitle, { fontFamily: "Inter_400Regular" }]}>
             Create a collection to organize your recipes
-          </Text>
-        </View>
+            </Text>
+          </View>
       ) : (
         <FlatList
           data={filteredCollections}

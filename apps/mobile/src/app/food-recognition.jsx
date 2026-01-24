@@ -44,6 +44,7 @@ import {
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import ErrorState from "@/components/ErrorState";
+import UpgradePrompt from "@/components/UpgradePrompt";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -73,6 +74,8 @@ export default function FoodRecognitionScreen() {
   const [searchResultType, setSearchResultType] = useState(null); // "recipe", "suggestions", or "invalid"
   const [suggestions, setSuggestions] = useState([]); // Array of recipe suggestions
   const [invalidMessage, setInvalidMessage] = useState(""); // Error message for invalid input
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradeUsage, setUpgradeUsage] = useState(null);
 
   // Animation refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -125,6 +128,16 @@ export default function FoodRecognitionScreen() {
         return data;
       }
 
+      // Handle upgrade required (403)
+      if (response.status === 403 && data.requiresUpgrade) {
+        setUpgradeUsage(data.usage || null);
+        setShowUpgradePrompt(true);
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        throw new Error("Upgrade required");
+      }
+
       if (!response.ok) {
         throw new Error(data.error || "Failed to analyze image");
       }
@@ -164,6 +177,10 @@ export default function FoodRecognitionScreen() {
       }
     },
     onError: (error) => {
+      // Skip error display if upgrade is required (upgrade prompt already shown)
+      if (error.message === "Upgrade required") {
+        return;
+      }
       console.error("Recognition error:", error);
       setSearchResultType("invalid");
       setInvalidMessage(error.message || "Failed to analyze the image. Please try again.");
@@ -192,6 +209,16 @@ export default function FoodRecognitionScreen() {
       // This allows onSuccess to handle it and show the error card without Expo error notification
       if (response.status === 400 && data.type === "invalid") {
         return data;
+      }
+
+      // Handle upgrade required (403)
+      if (response.status === 403 && data.requiresUpgrade) {
+        setUpgradeUsage(data.usage || null);
+        setShowUpgradePrompt(true);
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        }
+        throw new Error("Upgrade required");
       }
 
       if (!response.ok) {
@@ -271,6 +298,10 @@ export default function FoodRecognitionScreen() {
       throw new Error("Invalid response format");
     },
     onError: (error) => {
+      // Skip error display if upgrade is required (upgrade prompt already shown)
+      if (error.message === "Upgrade required") {
+        return;
+      }
       console.error("Search error:", error);
       setSearchResultType("invalid");
       setInvalidMessage(error.message || "Couldn't find a recipe for that food. Try a different name or be more specific.");
@@ -1456,6 +1487,14 @@ export default function FoodRecognitionScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Upgrade Prompt */}
+      <UpgradePrompt
+        visible={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+        feature={activeMode === "scan" ? "food_recognition" : "recipe_generation"}
+        usage={upgradeUsage}
+      />
     </KeyboardAvoidingView>
   );
 }

@@ -70,6 +70,24 @@ export async function withRetry(apiCall, options = {}) {
     } catch (error) {
       lastError = error;
       
+      // DO NOT retry on quota errors - these are permanent failures
+      const isQuotaError = 
+        error.status === 429 ||
+        error.code === 'insufficient_quota' ||
+        error.type === 'insufficient_quota' ||
+        error.message?.includes('quota') ||
+        error.message?.includes('429') ||
+        error.error?.type === 'insufficient_quota' ||
+        error.error?.code === 'insufficient_quota';
+      
+      if (isQuotaError) {
+        // Don't retry quota errors - throw immediately with user-friendly message
+        const quotaError = new Error('API quota exceeded. Please try again later or contact support.');
+        quotaError.status = 429;
+        quotaError.code = 'insufficient_quota';
+        throw quotaError;
+      }
+      
       // Retry on network errors, timeouts, and truncated/malformed JSON responses
       const isRetryable = 
         error.message?.includes('incomplete') ||
@@ -291,7 +309,7 @@ export async function generateRecipesFromIngredients(ingredients, preferences = 
     ? '{"name": "ingredient name", "amount": "1", "unit": "cup"}, {"name": "salt", "amount": "1", "unit": "tsp"}'
     : '{"name": "ingredient name", "amount": "250", "unit": "g"}, {"name": "salt", "amount": "5", "unit": "ml"}';
 
-  const prompt = `Generate EXACTLY 10 recipes that can be made using these available ingredients: ${ingredients.join(', ')}
+  const prompt = `Generate EXACTLY 6 recipes that can be made using these available ingredients: ${ingredients.join(', ')}
 
 CRITICAL RECIPE REQUIREMENTS:
 - Generate ONLY real, traditional, or well-known recipes that actually exist
@@ -330,7 +348,7 @@ Respond with ONLY a JSON object:
   ]
 }
 
-You MUST return exactly 10 recipes.`;
+You MUST return exactly 6 recipes.`;
 
   // Wrap API call AND parsing in retry - truncated JSON triggers retry
   const parsed = await withRetry(
@@ -347,7 +365,7 @@ You MUST return exactly 10 recipes.`;
             content: prompt,
           },
         ],
-        max_tokens: 8000,
+        max_tokens: 12000,
         response_format: { type: 'json_object' },
       });
 
@@ -363,11 +381,11 @@ You MUST return exactly 10 recipes.`;
 
   let recipes = parsed.recipes || [];
   
-  // Ensure we have exactly 10 recipes
-  if (recipes.length < 10) {
-    console.warn(`AI only generated ${recipes.length} recipes, expected 10`);
-  } else if (recipes.length > 10) {
-    recipes = recipes.slice(0, 10);
+  // Ensure we have exactly 6 recipes
+  if (recipes.length < 6) {
+    console.warn(`AI only generated ${recipes.length} recipes, expected 6`);
+  } else if (recipes.length > 6) {
+    recipes = recipes.slice(0, 6);
   }
   
   return recipes;
@@ -649,8 +667,8 @@ Generate exactly ${neededCount} unique recipes. Make them realistic, authentic, 
               content: prompt,
             },
           ],
-          max_tokens: 2000,
-          response_format: { type: 'json_object' },
+          max_tokens: 10000,
+        response_format: { type: 'json_object' },
         });
 
         const content = response.choices[0]?.message?.content;

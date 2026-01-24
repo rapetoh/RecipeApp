@@ -59,7 +59,9 @@
       },
       "eas": {
         "projectId": "6417719c-f20e-4087-bb6c-a510d9d668e1"
-      }
+      },
+      "REVENUECAT_API_KEY_IOS": "appl_OUQYAoeXUPzefvpncEjHWHIavWQ",
+      "REVENUECAT_API_KEY_ANDROID": "test_fixisasxSCqfJnapOYtUyFgDHqD"
     },
     "runtimeVersion": {
       "policy": "appVersion"

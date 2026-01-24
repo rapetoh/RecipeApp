@@ -48,6 +48,8 @@ export default function MealPlanHistoryScreen() {
 
   const [selectedWeek, setSelectedWeek] = useState(null);
   const [showWeekOptions, setShowWeekOptions] = useState(null);
+  const [showWeekSelector, setShowWeekSelector] = useState(false);
+  const [weekToCopy, setWeekToCopy] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState("week"); // "week" | "2weeks" | "month"
 
@@ -57,6 +59,7 @@ export default function MealPlanHistoryScreen() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
 
   // Helper functions
   const getWeekStart = (date) => {
@@ -219,17 +222,28 @@ export default function MealPlanHistoryScreen() {
         }
         
         // Convert to array and calculate stats
-        const periods = Array.from(periodsMap.values()).map((period) => {
-          const planningPercentage = period.totalPossibleMeals > 0 
-            ? (period.mealsPlanned / period.totalPossibleMeals) * 100 
-            : 0;
-          return {
-            ...period,
-            totalRecipes: period.totalRecipes.size,
-            planningPercentage: Math.round(planningPercentage),
-            status: planningPercentage >= 80 ? "completed" : "partial",
-          };
-        }).sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+        
+        const periods = Array.from(periodsMap.values())
+          .map((period) => {
+            const planningPercentage = period.totalPossibleMeals > 0 
+              ? (period.mealsPlanned / period.totalPossibleMeals) * 100 
+              : 0;
+            return {
+              ...period,
+              totalRecipes: period.totalRecipes.size,
+              planningPercentage: Math.round(planningPercentage),
+              status: planningPercentage >= 80 ? "completed" : "partial",
+            };
+          })
+          .filter((period) => {
+            // Only include periods that have ended (end date is before today)
+            const periodEndDate = new Date(period.endDate);
+            periodEndDate.setHours(0, 0, 0, 0);
+            return periodEndDate < today;
+          })
+          .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
         
         return { data: periods };
       } catch (error) {
@@ -296,7 +310,7 @@ export default function MealPlanHistoryScreen() {
 
       Alert.alert(
         "Meal Plan Copied!",
-        "This week's meal plan has been copied to your current planning period.",
+        "The meal plan has been successfully copied to the selected week.",
         [
           { text: "OK", style: "default" },
           {
@@ -340,24 +354,7 @@ export default function MealPlanHistoryScreen() {
 
   const handleCopyWeek = () => {
     if (!showWeekOptions) return;
-
-    Alert.alert(
-      "Copy Meal Plan",
-      `Copy "${showWeekOptions.name}" to your current meal planning?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Copy",
-          onPress: () => {
-            const nextMonday = getNextMonday();
-            copyMealPlanMutation.mutate({
-              weekId: showWeekOptions.id,
-              targetStartDate: nextMonday,
-            });
-          },
-        },
-      ],
-    );
+    handleCopyClick(showWeekOptions);
   };
 
   const handleViewWeek = () => {
@@ -373,6 +370,67 @@ export default function MealPlanHistoryScreen() {
     const nextMonday = new Date(today);
     nextMonday.setDate(today.getDate() + daysUntilMonday);
     return nextMonday.toISOString().split("T")[0];
+  };
+
+  // Get upcoming weeks for week selector
+  const getUpcomingWeeks = () => {
+    const weeks = [];
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    
+    // Start from next Monday
+    let currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() + daysUntilMonday);
+    
+    // Generate 6 upcoming weeks
+    for (let i = 0; i < 6; i++) {
+      const weekStart = new Date(currentMonday);
+      weekStart.setDate(currentMonday.getDate() + (i * 7));
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      
+      weeks.push({
+        startDate: weekStart.toISOString().split("T")[0],
+        endDate: weekEnd.toISOString().split("T")[0],
+        label: formatDateRange(weekStart.toISOString().split("T")[0], weekEnd.toISOString().split("T")[0]),
+      });
+    }
+    
+    return weeks;
+  };
+
+  // Handle copy button click (from top-right or modal)
+  const handleCopyClick = (week) => {
+    if (!week) {
+      Alert.alert("Error", "Unable to copy: Week information is missing.");
+      return;
+    }
+    
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    // Close options modal if open
+    setShowWeekOptions(null);
+    
+    // Set both states together
+    setWeekToCopy(week);
+    setShowWeekSelector(true);
+  };
+
+  // Handle week selection from selector
+  const handleWeekSelect = (targetWeek) => {
+    if (!weekToCopy) return;
+    
+    setShowWeekSelector(false);
+    
+    copyMealPlanMutation.mutate({
+      weekId: weekToCopy.id,
+      targetStartDate: targetWeek.startDate,
+    });
+    
+    setWeekToCopy(null);
   };
 
   const formatDateRange = (startDate, endDate) => {
@@ -471,7 +529,8 @@ export default function MealPlanHistoryScreen() {
           </View>
           <TouchableOpacity
             style={styles.copyButton}
-            onPress={() => setShowWeekOptions(selectedWeek)}
+            onPress={() => handleCopyClick(selectedWeek)}
+            activeOpacity={0.7}
           >
             <Copy size={20} color="#FF9F1C" />
           </TouchableOpacity>
@@ -662,6 +721,91 @@ export default function MealPlanHistoryScreen() {
             })}
           </View>
         </ScrollView>
+
+        {/* Week Selector Modal */}
+        {showWeekSelector && weekToCopy && (
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={() => {
+                setShowWeekSelector(false);
+                setWeekToCopy(null);
+              }}
+            >
+              <View style={styles.weekSelectorModalContent}>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderLeft}>
+                    <Copy size={20} color="#FF9F1C" />
+                    <Text
+                      style={[
+                        styles.modalTitle,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      Select Target Week
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.modalClose}
+                    onPress={() => {
+                      setShowWeekSelector(false);
+                      setWeekToCopy(null);
+                    }}
+                  >
+                    <X size={20} color="#666666" />
+                  </TouchableOpacity>
+                </View>
+
+                <Text
+                  style={[
+                    styles.weekSelectorSubtitle,
+                    { fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  Copy "{weekToCopy?.name || formatDateRange(weekToCopy?.startDate, weekToCopy?.endDate)}" to:
+                </Text>
+
+                <ScrollView
+                  style={styles.weekSelectorList}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {getUpcomingWeeks().map((week, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.weekSelectorOption}
+                      onPress={() => handleWeekSelect(week)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.weekSelectorOptionLeft}>
+                        <Calendar size={18} color="#FF9F1C" />
+                        <View style={styles.weekSelectorOptionInfo}>
+                          <Text
+                            style={[
+                              styles.weekSelectorOptionLabel,
+                              { fontFamily: "Inter_500Medium" },
+                            ]}
+                          >
+                            {index === 0 ? "Next Week" : `Week ${index + 1}`}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.weekSelectorOptionDate,
+                              { fontFamily: "Inter_400Regular" },
+                            ]}
+                          >
+                            {week.label}
+                          </Text>
+                        </View>
+                      </View>
+                      <ChevronRight size={18} color="#CCCCCC" />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   }
@@ -1436,6 +1580,58 @@ const styles = StyleSheet.create({
   modalOptionTextPrimary: {
     fontSize: 16,
     color: "#FF9F1C",
+  },
+  // Week Selector Modal Styles
+  weekSelectorModalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 40,
+    maxHeight: "80%",
+  },
+  modalHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  weekSelectorSubtitle: {
+    fontSize: 14,
+    color: "#666666",
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  weekSelectorList: {
+    maxHeight: 400,
+  },
+  weekSelectorOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#F8F8F8",
+    marginBottom: 10,
+  },
+  weekSelectorOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  weekSelectorOptionInfo: {
+    flex: 1,
+  },
+  weekSelectorOptionLabel: {
+    fontSize: 16,
+    color: "#000000",
+    marginBottom: 2,
+  },
+  weekSelectorOptionDate: {
+    fontSize: 13,
+    color: "#666666",
   },
   loadingContainer: {
     alignItems: "center",

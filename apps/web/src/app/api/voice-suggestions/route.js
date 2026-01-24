@@ -1,6 +1,7 @@
 import sql from "../utils/sql.js";
 import OpenAI from "openai";
 import { validateVoiceInput, safeParseJSON, withRetry } from "../utils/openai.js";
+import { checkFeatureAccess, trackFeatureUsage } from "../utils/subscription.js";
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -18,6 +19,20 @@ export async function POST(request) {
       return Response.json(
         { success: false, error: "User ID is required" },
         { status: 400 }
+      );
+    }
+
+    // Check feature access (subscription gating)
+    const accessCheck = await checkFeatureAccess(userId, 'voice_suggestions');
+    if (!accessCheck.hasAccess) {
+      return Response.json(
+        { 
+          success: false, 
+          error: accessCheck.reason || "Feature access denied",
+          requiresUpgrade: true,
+          usage: accessCheck.usage,
+        },
+        { status: 403 }
       );
     }
 
@@ -93,6 +108,24 @@ export async function POST(request) {
           transcription = data.text;
         } catch (altError) {
           console.error("Alternative transcription method also failed:", altError);
+          
+          // Check for quota errors in transcription
+          const isQuotaError = 
+            altError.status === 429 ||
+            altError.code === 'insufficient_quota' ||
+            altError.type === 'insufficient_quota' ||
+            altError.message?.includes('quota') ||
+            altError.message?.includes('429') ||
+            altError.error?.type === 'insufficient_quota' ||
+            altError.error?.code === 'insufficient_quota';
+          
+          if (isQuotaError) {
+            return Response.json(
+              { success: false, error: "API quota exceeded. Please try typing your request instead." },
+              { status: 429 }
+            );
+          }
+          
           return Response.json(
             { success: false, error: "Failed to transcribe audio. Please try typing your request instead." },
             { status: 500 }
@@ -306,10 +339,42 @@ export async function POST(request) {
     return Response.json({
       success: true,
       transcription,
-      recipes: recipesWithScores.slice(0, 10), // Return top 10
+      recipes: recipesWithScores.slice(0, 6), // Return top 6
     });
   } catch (error) {
     console.error("Error in voice-suggestions endpoint:", error);
+    
+    // Check for quota errors
+    const isQuotaError = 
+      error.status === 429 ||
+      error.code === 'insufficient_quota' ||
+      error.type === 'insufficient_quota' ||
+      error.message?.includes('quota') ||
+      error.message?.includes('429') ||
+      error.error?.type === 'insufficient_quota' ||
+      error.error?.code === 'insufficient_quota';
+    
+    if (isQuotaError) {
+      return Response.json(
+        { 
+          success: false, 
+          error: "API quota exceeded. Please try again later or contact support." 
+        },
+        { status: 429 }
+      );
+    }
+    
+    // Check for incomplete JSON errors
+    if (error.message?.includes('incomplete') || error.message?.includes('truncated')) {
+      return Response.json(
+        { 
+          success: false, 
+          error: "Response was incomplete. Please try again with a shorter request." 
+        },
+        { status: 500 }
+      );
+    }
+    
     return Response.json(
       { success: false, error: "Failed to process voice suggestions" },
       { status: 500 }
@@ -527,7 +592,7 @@ async function generateVoiceBasedSuggestions(
 
   const prompt = `You are an expert nutritionist and chef AI assistant. The user just said: "${vibe}"
 
-Generate EXACTLY 10 personalized recipe suggestions that match their current mood and request. You MUST return exactly 10 recipes, no more, no less.
+Generate EXACTLY 6 personalized recipe suggestions that match their current mood and request. You MUST return exactly 6 recipes, no more, no less.
 
 CRITICAL RECIPE REQUIREMENTS:
 - Generate ONLY real, traditional, or well-known recipes that actually exist
@@ -586,7 +651,7 @@ Respond with ONLY a JSON object:
             content: prompt,
           },
         ],
-        max_tokens: 4000,
+        max_tokens: 12000,
         response_format: { type: "json_object" },
       });
 
@@ -603,12 +668,12 @@ Respond with ONLY a JSON object:
 
   let recipes = parsed.recipes || [];
   
-  // Ensure we have exactly 10 recipes (pad or trim if needed)
-  if (recipes.length < 10) {
-    console.warn(`AI only generated ${recipes.length} recipes, expected 10`);
-    // If we have fewer than 10, we'll return what we have (better than padding with duplicates)
-  } else if (recipes.length > 10) {
-    recipes = recipes.slice(0, 10);
+  // Ensure we have exactly 6 recipes (pad or trim if needed)
+  if (recipes.length < 6) {
+    console.warn(`AI only generated ${recipes.length} recipes, expected 6`);
+    // If we have fewer than 6, we'll return what we have (better than padding with duplicates)
+  } else if (recipes.length > 6) {
+    recipes = recipes.slice(0, 6);
   }
   
   return recipes;
