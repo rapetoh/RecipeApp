@@ -77,8 +77,8 @@ export default function SubscriptionPlansScreen() {
       const result = await purchaseAsync(currentPackage);
       
       if (result.success) {
-        // Navigate to confirmation screen
-        router.push("/subscription/success");
+        // Navigate to confirmation screen (replace to clear Plans from stack)
+        router.replace("/subscription/success");
       } else {
         if (!result.userCancelled) {
           Alert.alert(
@@ -113,18 +113,27 @@ export default function SubscriptionPlansScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
+      
+      {/* Top Background Gradient */}
+      <LinearGradient
+        colors={["#FFE8D1", "#FFF5E6", "#FFFFFF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        locations={[0, 0.5, 1]}
+        style={styles.topGradient}
+      />
 
       {/* Close Button - Absolute positioned */}
       <TouchableOpacity
         style={[styles.closeButton, { top: insets.top + 8 }]}
-        onPress={() => router.back()}
+        onPress={() => router.replace("/(tabs)/profile")}
         activeOpacity={0.7}
       >
         <X size={24} color="#000000" />
       </TouchableOpacity>
 
       <ScrollView 
-        style={styles.scrollView}
+        style={[styles.scrollView, { zIndex: 1 }]}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -132,7 +141,7 @@ export default function SubscriptionPlansScreen() {
         {/* Premium Badge */}
         <View style={styles.badgeContainer}>
           <LinearGradient
-            colors={["#FF9F1C", "#FF8C00"]}
+            colors={["#FFC966", "#FF9F1C", "#FF7A00"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.premiumBadge}
@@ -308,9 +317,11 @@ export default function SubscriptionPlansScreen() {
                 const result = await restoreAsync();
                 if (result.success) {
                   Alert.alert("Success", "Purchases restored successfully!");
-                  router.push("/subscription/success");
+                  router.replace("/subscription/success");
                 } else {
-                  Alert.alert("No Purchases", "No previous purchases found to restore.");
+                  // Show the actual error message from RevenueCat
+                  const errorMessage = result.error || "No previous purchases found to restore.";
+                  Alert.alert("No Purchases", errorMessage);
                 }
               } catch (error) {
                 Alert.alert("Error", "Failed to restore purchases. Please try again.");
@@ -352,6 +363,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
+  topGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 300,
+    zIndex: 0,
+    pointerEvents: "none",
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -372,6 +392,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    backgroundColor: "transparent",
   },
   scrollContent: {
     paddingHorizontal: 20,

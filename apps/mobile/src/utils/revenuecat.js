@@ -71,9 +71,11 @@ export async function isRevenueCatReady() {
 
 /**
  * Get available subscription packages
+ * @param {number} retryCount - Current retry attempt (internal use)
+ * @param {number} maxRetries - Maximum number of retries for error 7746
  * @returns {Promise<Array>} Array of available packages
  */
-export async function getSubscriptionPackages() {
+export async function getSubscriptionPackages(retryCount = 0, maxRetries = 3) {
   try {
     if (!isInitialized) {
       throw new Error('RevenueCat not initialized. Call initializeRevenueCat() first.');
@@ -108,7 +110,28 @@ export async function getSubscriptionPackages() {
       packageType: pkg.packageType,
     }));
   } catch (error) {
+    // Check if this is error 7746 (fetch token being ingested)
+    const errorMessage = error?.message || error?.toString() || '';
+    const isTokenIngestionError = errorMessage.includes('7746') || 
+                                   errorMessage.includes('fetch token is currently being ingested') ||
+                                   errorMessage.includes('being ingested');
+    
+    if (isTokenIngestionError && retryCount < maxRetries) {
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`[RevenueCat] Error 7746 detected, retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Retry the request
+      return getSubscriptionPackages(retryCount + 1, maxRetries);
+    }
+    
+    // If not error 7746, or max retries reached, log and return empty array
     console.error('Error fetching subscription packages:', error);
+    if (isTokenIngestionError && retryCount >= maxRetries) {
+      console.warn('[RevenueCat] Max retries reached for error 7746. RevenueCat backend may still be processing.');
+    }
     return [];
   }
 }
@@ -226,7 +249,7 @@ export async function purchasePackage(packageToPurchase, userId = null) {
 /**
  * Restore purchases
  * @param {string} userId - User ID from auth context (optional)
- * @returns {Promise<{success: boolean, customerInfo?: object}>}
+ * @returns {Promise<{success: boolean, customerInfo?: object, error?: string}>}
  */
 export async function restorePurchases(userId = null) {
   try {
@@ -240,8 +263,35 @@ export async function restorePurchases(userId = null) {
       const customerInfoWithSubscription = await waitForSubscriptionInCustomerInfo(actualUserId, 3, 500);
       const finalCustomerInfo = customerInfoWithSubscription || customerInfo;
       
-      // Verify with backend
+      // Check if we actually found an active subscription
+      const activeEntitlement = getActiveEntitlement(finalCustomerInfo);
+      
+      if (!activeEntitlement) {
+        console.log('[RevenueCat] No active subscription found after restore');
+        return {
+          success: false,
+          error: 'No active subscription found. If you have a subscription, make sure you\'re signed in with the same Apple ID used to purchase it.',
+          customerInfo: finalCustomerInfo,
+        };
+      }
+      
+      // Verify with backend only if subscription was found
       await verifyPurchaseWithBackend(finalCustomerInfo, actualUserId);
+      
+      return {
+        success: true,
+        customerInfo: finalCustomerInfo,
+      };
+    }
+    
+    // If no userId, check if there's an active entitlement anyway
+    const activeEntitlement = getActiveEntitlement(customerInfo);
+    if (!activeEntitlement) {
+      return {
+        success: false,
+        error: 'No active subscription found. If you have a subscription, make sure you\'re signed in with the same Apple ID used to purchase it.',
+        customerInfo,
+      };
     }
     
     return {
@@ -313,13 +363,25 @@ async function verifyPurchaseWithBackend(customerInfo, userId) {
     
     console.log('[RevenueCat] Found active entitlement:', activeSubscription.identifier);
 
+    // Get cancellation status from entitlement or subscription
+    // RevenueCat provides willRenew property on entitlements
+    // If willRenew is false, it means subscription will cancel at period end
+    const willRenew = activeSubscription.willRenew !== false; // Default to true if undefined
+    const cancelAtPeriodEnd = !willRenew;
+
+    // Also check subscriptions object for more detailed cancellation info
+    const productIdentifier = activeSubscription.productIdentifier;
+    const subscriptions = customerInfo.subscriptions || {};
+    const subscription = subscriptions[productIdentifier];
+    const actualCancelAtPeriodEnd = subscription?.willRenew === false || cancelAtPeriodEnd;
+
     const subscriptionData = {
       subscriptionId: activeSubscription.identifier,
       plan: activeSubscription.productIdentifier?.includes('yearly') ? 'yearly' : 'monthly',
       status: 'active',
       periodStart: activeSubscription.latestPurchaseDate,
       periodEnd: activeSubscription.expirationDate,
-      cancelAtPeriodEnd: false,
+      cancelAtPeriodEnd: actualCancelAtPeriodEnd,
       platform: Platform.OS,
     };
 

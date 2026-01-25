@@ -13,9 +13,27 @@ export async function POST(request) {
     //   return Response.json({ error: "Invalid signature" }, { status: 401 });
     // }
 
-    if (!event || !event.customer_id) {
+    if (!event) {
       return Response.json(
         { success: false, error: "Invalid webhook payload" },
+        { status: 400 }
+      );
+    }
+
+    // Handle test events from RevenueCat dashboard
+    // Test events have type: "TEST" and don't have customer_id
+    if (event.type === 'TEST') {
+      console.log('[Webhook] Received test event, acknowledging');
+      return Response.json({ 
+        success: true, 
+        message: "Test event received and acknowledged" 
+      });
+    }
+
+    // Real events must have customer_id
+    if (!event.customer_id) {
+      return Response.json(
+        { success: false, error: "Invalid webhook payload: missing customer_id" },
         { status: 400 }
       );
     }

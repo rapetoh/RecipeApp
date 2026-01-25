@@ -322,7 +322,7 @@ export default function ProfileScreen() {
                     if (Platform.OS !== "web") {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }
-                    router.push("/subscription/plans");
+                    router.push("/subscription/manage");
                   }}
                 >
                   <Text
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={["#FF9F1C", "#FF8C00"]}
+                  colors={["#FFC966", "#FF9F1C", "#FF7A00"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.upgradeGradient}

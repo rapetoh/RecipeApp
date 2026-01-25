@@ -38,7 +38,9 @@ export async function GET(request) {
         current_period_start,
         current_period_end,
         cancel_at_period_end,
-        platform
+        platform,
+        revenuecat_subscription_id,
+        created_at
       FROM subscriptions
       WHERE user_id = ${userId}::uuid
         AND status = 'active'
@@ -60,8 +62,12 @@ export async function GET(request) {
         isPremium: effectiveStatus === 'premium' || effectiveStatus === 'trial',
         plan: activeSubscription?.plan || null,
         expiresAt: user.subscription_expires_at,
+        renewalDate: activeSubscription?.current_period_end || null,
         cancelAtPeriodEnd: activeSubscription?.cancel_at_period_end || false,
         platform: activeSubscription?.platform || null,
+        subscriptionId: activeSubscription?.revenuecat_subscription_id || null,
+        memberSince: activeSubscription?.created_at || null,
+        currentPeriodStart: activeSubscription?.current_period_start || null,
       },
     });
   } catch (error) {

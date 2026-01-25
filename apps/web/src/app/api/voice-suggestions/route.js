@@ -638,27 +638,27 @@ Respond with ONLY a JSON object:
   // Wrap OpenAI call AND parsing in retry logic - if JSON is truncated, retry the whole request
   const parsed = await withRetry(
     async () => {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert nutritionist and chef AI assistant. Generate personalized recipes based on user's voice input and preferences.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert nutritionist and chef AI assistant. Generate personalized recipes based on user's voice input and preferences.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
         max_tokens: 12000,
-        response_format: { type: "json_object" },
-      });
+    response_format: { type: "json_object" },
+  });
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error("No response from OpenAI");
-      }
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("No response from OpenAI");
+  }
 
       // Parse inside retry - truncated JSON will trigger a retry
       return safeParseJSON(content, 'voice suggestions');
