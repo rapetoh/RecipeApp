@@ -107,6 +107,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
   const [isSavingRecipe, setIsSavingRecipe] = useState(false);
+  const [isQueryExpanded, setIsQueryExpanded] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [saveAllProgress, setSaveAllProgress] = useState(0);
 
   // Animation for waveform
   const waveformAnim = useRef(
@@ -767,74 +770,140 @@ export default function VoiceSuggestions({ visible, onClose }) {
     setShowCollectionModal(true);
   };
 
+  const handleSaveAll = () => {
+    if (!auth?.user?.id) {
+      Alert.alert("Sign In Required", "Please sign in to save recipes");
+      return;
+    }
+
+    if (results.length === 0) return;
+
+    // Show collection selection modal first (use null to indicate "save all" mode)
+    setSelectedRecipe(null);
+    setShowCollectionModal(true);
+  };
+
   const handleConfirmKeepRecipe = async () => {
-    if (!selectedRecipe) return;
+    // Handle both single recipe and "save all" modes
+    if (!selectedRecipe && results.length === 0) return;
     
     setIsSavingRecipe(true);
+    setIsSavingAll(!selectedRecipe); // true if saving all, false if single
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     
     try {
       const apiUrl = getApiUrl();
-      
-      // Add to saved_recipes and Generated collection using save-generated endpoint
-      // Even though recipe exists, this ensures proper setup
-      const response = await fetchWithRetry(`${apiUrl}/api/recipes/save-generated`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(auth?.jwt && { "Authorization": `Bearer ${auth.jwt}` }),
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: selectedRecipe.name,
-          description: selectedRecipe.description,
-          category: selectedRecipe.category,
-          cuisine: selectedRecipe.cuisine,
-          cooking_time: selectedRecipe.cooking_time,
-          prep_time: selectedRecipe.prep_time,
-          difficulty: selectedRecipe.difficulty,
-          servings: selectedRecipe.servings,
-          ingredients: selectedRecipe.ingredients,
-          instructions: selectedRecipe.instructions,
-          image_url: selectedRecipe.image_url,
-          nutrition: selectedRecipe.nutrition,
-          tags: selectedRecipe.tags || ["ai-generated", "voice-suggested"],
-          collectionIds: selectedCollectionIds,
-        }),
-      });
+      const recipesToSave = selectedRecipe ? [selectedRecipe] : results;
+      const savedIds = new Set();
+      let successCount = 0;
+      let errorCount = 0;
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to save recipe");
+      // Save each recipe
+      for (let i = 0; i < recipesToSave.length; i++) {
+        const recipe = recipesToSave[i];
+        if (!selectedRecipe) {
+          setSaveAllProgress(i + 1);
+        }
+        
+        try {
+          const response = await fetchWithRetry(`${apiUrl}/api/recipes/save-generated`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(auth?.jwt && { "Authorization": `Bearer ${auth.jwt}` }),
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: recipe.name,
+              description: recipe.description,
+              category: recipe.category,
+              cuisine: recipe.cuisine,
+              cooking_time: recipe.cooking_time,
+              prep_time: recipe.prep_time,
+              difficulty: recipe.difficulty,
+              servings: recipe.servings,
+              ingredients: recipe.ingredients,
+              instructions: recipe.instructions,
+              image_url: recipe.image_url,
+              nutrition: recipe.nutrition,
+              tags: recipe.tags || ["ai-generated", "voice-suggested"],
+              collectionIds: selectedCollectionIds,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              savedIds.add(recipe.id);
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } else {
+            const error = await response.json().catch(() => ({}));
+            console.error(`Error saving recipe ${recipe.name}:`, error);
+            errorCount++;
+          }
+        } catch (error) {
+          console.error(`Error saving recipe ${recipe.name}:`, error);
+          errorCount++;
+        }
       }
 
-      const data = await response.json();
+      // Update state
+      setSavedRecipeIds(new Set([...savedRecipeIds, ...savedIds]));
+      setIsSavingRecipe(false);
+      setIsSavingAll(false);
+      setShowCollectionModal(false);
+      setSelectedRecipe(null);
+      setSelectedCollectionIds([]);
+      setSaveAllProgress(0);
       
-      if (data.success) {
-        setSavedRecipeIds(new Set([...savedRecipeIds, selectedRecipe.id]));
-        setIsSavingRecipe(false);
-        setShowCollectionModal(false);
-        setSelectedRecipe(null);
-        setSelectedCollectionIds([]);
-        
-        // Refetch collections cache to refresh MyRecipe page immediately
-        queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
-        queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
-        
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
+      // Refetch collections cache to refresh MyRecipe page immediately
+      queryClient.refetchQueries({ queryKey: ["collections", auth?.user?.id] });
+      queryClient.refetchQueries({ queryKey: ["collection-recipes"] });
+      
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      // Show success/error message
+      if (selectedRecipe) {
+        // Single recipe mode
         Alert.alert(
           "Recipe Kept!",
           "This recipe has been added to your collections.",
           [{ text: "OK" }]
         );
+      } else {
+        // Save all mode
+        if (successCount > 0 && errorCount === 0) {
+          Alert.alert(
+            "All Recipes Saved!",
+            `${successCount} recipe${successCount !== 1 ? 's' : ''} added to your collections.`,
+            [{ text: "OK" }]
+          );
+        } else if (successCount > 0 && errorCount > 0) {
+          Alert.alert(
+            "Partially Saved",
+            `${successCount} saved, ${errorCount} failed.`,
+            [{ text: "OK" }]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            "Failed to save recipes. Please try again.",
+            [{ text: "OK" }]
+          );
+        }
       }
     } catch (error) {
       setIsSavingRecipe(false);
-      Alert.alert("Error", error.message || "Failed to save recipe");
+      setIsSavingAll(false);
+      setSaveAllProgress(0);
+      Alert.alert("Error", error.message || "Failed to save recipes");
     }
   };
 
@@ -858,12 +927,17 @@ export default function VoiceSuggestions({ visible, onClose }) {
           <BottomSheetView style={styles.contentContainer}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, { fontFamily: "Inter_700Bold" }]}>
-            {stage === "listening" && "I'm listening..."}
-            {stage === "processing" && "Processing..."}
-            {stage === "results" && `Found ${results.length} Recipe${results.length !== 1 ? "s" : ""}`}
-            {stage === "error" && "Oops!"}
-          </Text>
+          <View style={styles.headerLeft}>
+            {stage === "results" && (
+              <ChefHat size={28} color="#FF9F1C" />
+            )}
+            <Text style={[styles.headerTitle, { fontFamily: "Inter_700Bold" }]}>
+              {stage === "listening" && "I'm listening..."}
+              {stage === "processing" && "Processing..."}
+              {stage === "results" && "Here we go!"}
+              {stage === "error" && "Oops!"}
+            </Text>
+          </View>
           <TouchableOpacity 
             onPress={handleCloseButton}
             style={styles.closeButton}
@@ -1053,14 +1127,27 @@ export default function VoiceSuggestions({ visible, onClose }) {
         {/* Results Stage */}
         {stage === "results" && (
           <View style={styles.resultsContainer}>
-            <Text
-              style={[
-                styles.resultsSubtitle,
-                { fontFamily: "Inter_400Regular" },
-              ]}
+            <TouchableOpacity 
+              onPress={() => setIsQueryExpanded(!isQueryExpanded)}
+              activeOpacity={0.7}
+              style={styles.queryContainer}
             >
-              Based on '{vibeText}'
-            </Text>
+              <Text
+                style={[
+                  styles.resultsSubtitle,
+                  { fontFamily: "Inter_400Regular" },
+                ]}
+              >
+                Based on '{isQueryExpanded || vibeText.length <= 100 
+                  ? vibeText 
+                  : `${vibeText.substring(0, 100)}...`}'
+              </Text>
+              {vibeText.length > 100 && (
+                <Text style={styles.expandText}>
+                  {isQueryExpanded ? "Show less" : "Show more"}
+                </Text>
+              )}
+            </TouchableOpacity>
 
             <FlatList
               data={results}
@@ -1071,7 +1158,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
               contentContainerStyle={styles.gridContent}
               showsVerticalScrollIndicator={true}
               ListFooterComponent={
-            <View style={styles.resultsActions}>
+            <View style={[styles.resultsActions, { paddingBottom: insets.bottom + 80 }]}>
               <TouchableOpacity
                 style={styles.tryAgainButton}
                 onPress={handleTryAgain}
@@ -1087,26 +1174,35 @@ export default function VoiceSuggestions({ visible, onClose }) {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.viewPlannerButton}
-                    onPress={() => {
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }
-                      handleCloseButton(); // Close the modal first
-                      // Navigate to meal planning page
-                      setTimeout(() => {
-                        router.push('/meal-planning');
-                      }, 300); // Small delay to ensure modal closes smoothly
-                    }}
+                style={[styles.saveAllButton, (isSavingAll || results.length === 0) && styles.saveAllButtonDisabled]}
+                onPress={handleSaveAll}
+                disabled={isSavingAll || results.length === 0}
               >
-                <Text
-                  style={[
-                    styles.viewPlannerText,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  View Planner
-                </Text>
+                {isSavingAll ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text
+                      style={[
+                        styles.saveAllText,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      Saving... ({saveAllProgress}/{results.length})
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} color="#FFFFFF" />
+                    <Text
+                      style={[
+                        styles.saveAllText,
+                        { fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      Save All
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
               }
@@ -1121,14 +1217,27 @@ export default function VoiceSuggestions({ visible, onClose }) {
             contentContainerStyle={styles.resultsContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text
-              style={[
-                styles.resultsSubtitle,
-                { fontFamily: "Inter_400Regular" },
-              ]}
+            <TouchableOpacity 
+              onPress={() => setIsQueryExpanded(!isQueryExpanded)}
+              activeOpacity={0.7}
+              style={styles.queryContainer}
             >
-              Based on '{vibeText}'
-            </Text>
+              <Text
+                style={[
+                  styles.resultsSubtitle,
+                  { fontFamily: "Inter_400Regular" },
+                ]}
+              >
+                Based on '{isQueryExpanded || vibeText.length <= 100 
+                  ? vibeText 
+                  : `${vibeText.substring(0, 100)}...`}'
+              </Text>
+              {vibeText.length > 100 && (
+                <Text style={styles.expandText}>
+                  {isQueryExpanded ? "Show less" : "Show more"}
+                </Text>
+              )}
+            </TouchableOpacity>
 
             <ErrorState
               title="Oops!"
@@ -1164,7 +1273,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
                   { fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                Select Collections
+                {selectedRecipe ? "Select Collections" : `Save All ${results.length} Recipe${results.length !== 1 ? 's' : ''}`}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -1261,7 +1370,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
                       { fontFamily: "Inter_600SemiBold" },
                     ]}
                   >
-                    Keep Recipe (Generated)
+                    {selectedRecipe ? "Keep Recipe (Generated)" : `Save All ${results.length} Recipe${results.length !== 1 ? 's' : ''}`}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1315,6 +1424,11 @@ const styles = StyleSheet.create({
     paddingTop: 44,
     marginBottom: 24,
     zIndex: 999,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   headerTitle: {
     fontSize: 24,
@@ -1455,11 +1569,19 @@ const styles = StyleSheet.create({
   resultsContent: {
     paddingBottom: 150, // Increased to ensure buttons are accessible
   },
+  queryContainer: {
+    marginBottom: 20,
+    paddingTop: 20,
+  },
   resultsSubtitle: {
     fontSize: 16,
     color: "#666666",
-    marginBottom: 20,
-    paddingTop: 20,
+    marginBottom: 4,
+  },
+  expandText: {
+    fontSize: 14,
+    color: "#FF9F1C",
+    marginTop: 4,
   },
   recipeCardWrapper: {
     marginBottom: 16,
@@ -1567,15 +1689,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#FF9F1C",
   },
-  viewPlannerButton: {
+  saveAllButton: {
     flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FF9F1C",
     paddingVertical: 14,
     borderRadius: 12,
+    gap: 8,
   },
-  viewPlannerText: {
+  saveAllButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveAllText: {
     fontSize: 16,
     color: "#FFFFFF",
   },

@@ -51,11 +51,14 @@ export default function MealPlanningScreen() {
       // Parse date in local timezone to avoid timezone offset issues
       const [year, month, day] = params.selectedDate.split('-').map(Number);
       const date = new Date(year, month - 1, day);
+      date.setHours(0, 0, 0, 0); // Normalize to midnight local time
       if (!isNaN(date.getTime())) {
         return date;
       }
     }
-    return new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to midnight local time
+    return today;
   };
 
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
@@ -81,6 +84,7 @@ export default function MealPlanningScreen() {
       // Parse date in local timezone to avoid timezone offset issues
       const [year, month, day] = params.selectedDate.split('-').map(Number);
       const date = new Date(year, month - 1, day);
+      date.setHours(0, 0, 0, 0); // Normalize to midnight local time
       if (!isNaN(date.getTime())) {
         console.log('📅 Updating selectedDate from URL params:', params.selectedDate);
         setSelectedDate(date);
@@ -89,7 +93,6 @@ export default function MealPlanningScreen() {
         setTimeout(() => {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          date.setHours(0, 0, 0, 0);
           
           const daysDiff = Math.floor((date - today) / (1000 * 60 * 60 * 24));
           
@@ -112,6 +115,7 @@ export default function MealPlanningScreen() {
         console.log('📅 Received date from calendar:', selectedDateStr);
         const [year, month, day] = selectedDateStr.split('-').map(Number);
         const date = new Date(year, month - 1, day);
+        date.setHours(0, 0, 0, 0); // Normalize to midnight local time
         if (!isNaN(date.getTime())) {
           setSelectedDate(date);
           
@@ -119,7 +123,6 @@ export default function MealPlanningScreen() {
           setTimeout(() => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            date.setHours(0, 0, 0, 0);
             
             const daysDiff = Math.floor((date - today) / (1000 * 60 * 60 * 24));
             
@@ -143,6 +146,18 @@ export default function MealPlanningScreen() {
     Inter_700Bold,
   });
 
+  // Helper function to format date as YYYY-MM-DD in local timezone (not UTC)
+  // This prevents timezone conversion issues that can shift dates by one day
+  const formatDateLocal = (date) => {
+    if (typeof date === 'string') {
+      return date.split("T")[0]; // Already a string, just extract date part
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Generate next 14 days starting from today
   const getNext14Days = () => {
     const days = [];
@@ -153,7 +168,7 @@ export default function MealPlanningScreen() {
       const day = new Date(today);
       day.setDate(today.getDate() + i);
       days.push({
-        date: day.toISOString().split("T")[0],
+        date: formatDateLocal(day), // Use local formatting instead of UTC
         day: day,
       });
     }
@@ -169,8 +184,13 @@ export default function MealPlanningScreen() {
     const maxDate = new Date(today);
     maxDate.setDate(today.getDate() + 13);
     
-    if (selectedDate < today || selectedDate > maxDate) {
+    const normalizedSelectedDate = new Date(selectedDate);
+    normalizedSelectedDate.setHours(0, 0, 0, 0); // Normalize to midnight local time
+    
+    if (normalizedSelectedDate < today || normalizedSelectedDate > maxDate) {
       setSelectedDate(today);
+    } else {
+      setSelectedDate(normalizedSelectedDate); // Ensure selectedDate is normalized even if in range
     }
   }, []);
 
@@ -318,7 +338,13 @@ export default function MealPlanningScreen() {
       Alert.alert(
         "Grocery List Generated!",
         `Created a list with ${itemCount} items.`,
-        [{ text: "OK", style: "default" }],
+        [
+          { 
+            text: "OK", 
+            style: "default",
+            onPress: () => router.push("/grocery-lists")
+          }
+        ],
       );
     },
     onError: (error) => {
@@ -328,7 +354,9 @@ export default function MealPlanningScreen() {
 
 
   const handleDateSelect = (date) => {
-    setSelectedDate(date);
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0); // Normalize to midnight local time
+    setSelectedDate(normalizedDate);
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -443,7 +471,7 @@ export default function MealPlanningScreen() {
   const getMealsForSlot = (date, mealType) => {
     if (!mealPlans?.data) return [];
 
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     
     return mealPlans.data.filter((plan) => {
       const planDateStr = plan.date.split("T")[0]; // Extract date part from ISO string
@@ -455,7 +483,7 @@ export default function MealPlanningScreen() {
   const isDayFullyPlanned = (date) => {
     if (!mealPlans?.data) return false;
     
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     const mealsForDay = mealPlans.data.filter((plan) => {
       const planDateStr = plan.date.split("T")[0];
       return planDateStr === dateStr;
@@ -662,7 +690,7 @@ export default function MealPlanningScreen() {
                       style={styles.addButton}
                       onPress={() =>
                         handleAddMeal(
-                          selectedDate.toISOString().split("T")[0],
+                          formatDateLocal(selectedDate),
                           mealType,
                         )
                       }
@@ -763,6 +791,20 @@ export default function MealPlanningScreen() {
                 ]}
               >
                 Generate Grocery List
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.actionButtonTertiary]}
+              onPress={() => router.push("/grocery-lists")}
+            >
+              <Text
+                style={[
+                  styles.actionButtonTextTertiary,
+                  { fontFamily: "Inter_500Medium" },
+                ]}
+              >
+                View Grocery Lists
               </Text>
             </TouchableOpacity>
           </View>
@@ -1047,5 +1089,16 @@ const styles = StyleSheet.create({
   actionButtonTextSecondary: {
     fontSize: 16,
     color: "#000000",
+  },
+  actionButtonTertiary: {
+    backgroundColor: "#FF9F1C",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  actionButtonTextTertiary: {
+    fontSize: 16,
+    color: "#FFFFFF",
   },
 });

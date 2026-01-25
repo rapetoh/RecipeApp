@@ -84,6 +84,18 @@ export default function HomeScreen() {
     Inter_700Bold,
   });
 
+  // Helper function to format date as YYYY-MM-DD in local timezone (not UTC)
+  // This prevents timezone conversion issues that can shift dates by one day
+  const formatDateLocal = (date) => {
+    if (typeof date === 'string') {
+      return date.split("T")[0]; // Already a string, just extract date part
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Fetch user preferences (for display purposes only)
   // Note: Routing logic is handled in index.jsx, not here
   const { data: preferencesData, isLoading: preferencesLoading, refetch: refetchPreferences } = useQuery({
@@ -126,7 +138,9 @@ export default function HomeScreen() {
     });
 
   // Fetch today's meal plan
-  const todayDateString = currentTime.toISOString().split('T')[0];
+  const today = new Date(currentTime);
+  today.setHours(0, 0, 0, 0); // Normalize to midnight local time
+  const todayDateString = formatDateLocal(today);
   const { data: todayMealPlan } = useQuery({
     queryKey: ["today-meal-plan", auth?.user?.id, todayDateString],
     queryFn: async () => {

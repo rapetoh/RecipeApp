@@ -46,6 +46,18 @@ export default function MealCalendarScreen() {
     Inter_700Bold,
   });
 
+  // Helper function to format date as YYYY-MM-DD in local timezone (not UTC)
+  // This prevents timezone conversion issues that can shift dates by one day
+  const formatDateLocal = (date) => {
+    if (typeof date === 'string') {
+      return date.split("T")[0]; // Already a string, just extract date part
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Fetch meal plans for the current month
   const { data: mealPlans } = useQuery({
     queryKey: [
@@ -69,8 +81,8 @@ export default function MealCalendarScreen() {
         0,
       );
 
-      const startDate = firstDay.toISOString().split("T")[0];
-      const endDate = lastDay.toISOString().split("T")[0];
+      const startDate = formatDateLocal(firstDay);
+      const endDate = formatDateLocal(lastDay);
 
       const apiUrl = getApiUrl();
       console.log('📅 Calendar fetching meal plans:', { startDate, endDate, userId: auth.user.id });
@@ -104,7 +116,7 @@ export default function MealCalendarScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     
     // Store selected date in query cache for meal planning to pick up
     queryClient.setQueryData(['selectedDateFromCalendar'], dateStr);
@@ -173,7 +185,7 @@ export default function MealCalendarScreen() {
   const hasPlannedMeals = (date) => {
     if (!mealPlans?.data) return false;
 
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     return mealPlans.data.some((plan) => {
       const planDateStr = plan.date.split("T")[0];
       return planDateStr === dateStr;
@@ -183,7 +195,7 @@ export default function MealCalendarScreen() {
   const getMealCount = (date) => {
     if (!mealPlans?.data) return 0;
 
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     return mealPlans.data.filter((plan) => {
       const planDateStr = plan.date.split("T")[0];
       return planDateStr === dateStr;
@@ -194,7 +206,7 @@ export default function MealCalendarScreen() {
   const isDayFullyPlanned = (date) => {
     if (!mealPlans?.data) return false;
     
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     const mealsForDay = mealPlans.data.filter((plan) => {
       const planDateStr = plan.date.split("T")[0];
       return planDateStr === dateStr;
@@ -295,10 +307,10 @@ export default function MealCalendarScreen() {
                     isFullyPlanned,
                     mealCount,
                     isToday: dayData.isToday,
-                    dateStr: dayData.date.toISOString().split("T")[0],
+                    dateStr: formatDateLocal(dayData.date),
                     mealsData: mealPlans?.data?.filter(p => {
                       const planDateStr = p.date.split("T")[0];
-                      const targetDateStr = dayData.date.toISOString().split("T")[0];
+                      const targetDateStr = formatDateLocal(dayData.date);
                       return planDateStr === targetDateStr;
                     })
                   });

@@ -247,6 +247,18 @@ export default function RecipeDetailScreen() {
     favoriteRecipeMutation.mutate(action);
   };
 
+  // Helper function to format date as YYYY-MM-DD in local timezone (not UTC)
+  // This prevents timezone conversion issues that can shift dates by one day
+  const formatDateLocal = (date) => {
+    if (typeof date === 'string') {
+      return date.split("T")[0]; // Already a string, just extract date part
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Generate next 14 days for meal plan modal
   const getNext14Days = () => {
     const days = [];
@@ -257,7 +269,7 @@ export default function RecipeDetailScreen() {
       const day = new Date(today);
       day.setDate(today.getDate() + i);
       days.push({
-        date: day.toISOString().split("T")[0],
+        date: formatDateLocal(day), // Use local formatting instead of UTC
         day: day,
       });
     }

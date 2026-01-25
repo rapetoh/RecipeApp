@@ -93,18 +93,25 @@ export function MealPlanModal({
   };
 
   const formatDateForDisplay = (dateStr) => {
-    const date = new Date(dateStr);
+    // Parse date string in local timezone to avoid UTC conversion
+    // This prevents timezone shifts that can cause dates to appear on the wrong day
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setHours(0, 0, 0, 0); // Normalize to midnight
+    
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
 
-    if (date.toDateString() === today.toDateString()) {
+    if (date.getTime() === today.getTime()) {
       return {
         label: "Today",
         date: date.getDate(),
         month: date.toLocaleDateString("en-US", { month: "short" }),
       };
-    } else if (date.toDateString() === tomorrow.toDateString()) {
+    } else if (date.getTime() === tomorrow.getTime()) {
       return {
         label: "Tomorrow",
         date: date.getDate(),

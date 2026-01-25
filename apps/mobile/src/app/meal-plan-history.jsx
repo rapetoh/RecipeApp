@@ -60,6 +60,17 @@ export default function MealPlanHistoryScreen() {
     Inter_700Bold,
   });
 
+  // Helper function to format date as YYYY-MM-DD in local timezone (not UTC)
+  // This prevents timezone conversion issues that can shift dates by one day
+  const formatDateLocal = (date) => {
+    if (typeof date === 'string') {
+      return date.split("T")[0]; // Already a string, just extract date part
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Helper functions
   const getWeekStart = (date) => {
@@ -285,7 +296,7 @@ export default function MealPlanHistoryScreen() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   userId: auth.user.id,
-                  date: targetDate.toISOString().split("T")[0],
+                  date: formatDateLocal(targetDate),
                   mealType: mealType,
                   recipeId: meal.id,
                 }),
@@ -369,7 +380,8 @@ export default function MealPlanHistoryScreen() {
     const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
     const nextMonday = new Date(today);
     nextMonday.setDate(today.getDate() + daysUntilMonday);
-    return nextMonday.toISOString().split("T")[0];
+    nextMonday.setHours(0, 0, 0, 0); // Normalize to midnight
+    return formatDateLocal(nextMonday);
   };
 
   // Get upcoming weeks for week selector
@@ -390,10 +402,12 @@ export default function MealPlanHistoryScreen() {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       
+      weekStart.setHours(0, 0, 0, 0); // Normalize to midnight
+      weekEnd.setHours(0, 0, 0, 0); // Normalize to midnight
       weeks.push({
-        startDate: weekStart.toISOString().split("T")[0],
-        endDate: weekEnd.toISOString().split("T")[0],
-        label: formatDateRange(weekStart.toISOString().split("T")[0], weekEnd.toISOString().split("T")[0]),
+        startDate: formatDateLocal(weekStart),
+        endDate: formatDateLocal(weekEnd),
+        label: formatDateRange(formatDateLocal(weekStart), formatDateLocal(weekEnd)),
       });
     }
     
