@@ -40,7 +40,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/utils/auth/useAuth";
 import * as Haptics from "expo-haptics";
 import { IngredientIcon } from "@/components/IngredientIcon";
-import { getIngredientIcon } from "@/utils/ingredientIcons";
 import { getApiUrl } from "@/config/api";
 
 export default function GroceryListsScreen() {
@@ -375,7 +374,20 @@ export default function GroceryListsScreen() {
     }
 
 
-    return periods.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    return periods.sort((a, b) => {
+      // Current period always comes first
+      if (a.isCurrent && !b.isCurrent) return -1;
+      if (!a.isCurrent && b.isCurrent) return 1;
+      
+      // If both are current, incomplete comes first
+      if (a.isCurrent && b.isCurrent) {
+        if (a.status !== "completed" && b.status === "completed") return -1;
+        if (a.status === "completed" && b.status !== "completed") return 1;
+      }
+      
+      // Otherwise, sort by date (newest first)
+      return new Date(b.startDate) - new Date(a.startDate);
+    });
   }, [groceryListsData?.data, viewMode]);
 
   // Get items for selected period
@@ -774,27 +786,7 @@ export default function GroceryListsScreen() {
                           />
                       )}
                     </View>
-                    {(() => {
-                      try {
-                        const iconData = getIngredientIcon(itemName);
-                        return (
-                          <Image
-                            source={{ uri: iconData.imageUrl }}
-                            style={styles.itemImage}
-                            contentFit="cover"
-                            defaultSource={{ uri: iconData.fallbackUrl }}
-                          />
-                        );
-                      } catch (error) {
-                        console.error("Error getting ingredient icon:", error);
-                        // Fallback to a default icon or empty view
-                        return (
-                          <View style={[styles.itemImage, { backgroundColor: "#F0F0F0", justifyContent: "center", alignItems: "center" }]}>
-                            <ShoppingCart size={20} color="#999999" />
-                          </View>
-                        );
-                      }
-                    })()}
+                    <IngredientIcon ingredient={itemName} size={40} />
                     <View style={styles.itemInfo}>
                       <Text
                         style={[

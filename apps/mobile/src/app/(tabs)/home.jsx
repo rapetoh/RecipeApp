@@ -140,7 +140,7 @@ export default function HomeScreen() {
         const result = await response.json();
         if (result.success && result.data) {
           // Organize by meal type
-          const meals = { breakfast: null, lunch: null, dinner: null, snack: null };
+          const meals = { breakfast: null, lunch: null, dinner: null };
           result.data.forEach((meal) => {
             if (meals[meal.meal_type] === null) {
               meals[meal.meal_type] = {
@@ -168,7 +168,7 @@ export default function HomeScreen() {
     if (hour >= 5 && hour < 11) return "breakfast";
     if (hour >= 11 && hour < 15) return "lunch";
     if (hour >= 15 && hour < 21) return "dinner";
-    return "snack";
+    return "dinner"; // Default to dinner for late night/early morning
   };
 
 
@@ -558,7 +558,7 @@ export default function HomeScreen() {
         )}
 
         {/* Today's Menu Section */}
-        {isAuthenticated && todayMealPlan && (todayMealPlan.breakfast || todayMealPlan.lunch || todayMealPlan.dinner || todayMealPlan.snack) && (
+        {isAuthenticated && (
           <View style={styles.todayMenuSection}>
             <View style={styles.todayMenuHeader}>
               <Text style={[styles.todayMenuTitle, { fontFamily: "Inter_700Bold" }]}>
@@ -575,48 +575,63 @@ export default function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.todayMenuScroll}
             >
-              {["breakfast", "lunch", "dinner", "snack"].map((mealType) => {
-                const meal = todayMealPlan[mealType];
+              {["breakfast", "lunch", "dinner"].map((mealType) => {
+                const meal = todayMealPlan?.[mealType] || null;
                 const isCurrentMeal = getCurrentMealType() === mealType;
                 const mealLabels = {
                   breakfast: "BREAKFAST",
                   lunch: "LUNCH",
                   dinner: "DINNER",
-                  snack: "SNACK",
                 };
-                
-                if (!meal) return null;
+                const isPlaceholder = !meal;
                 
                 return (
                   <TouchableOpacity
                     key={mealType}
                     style={[
                       styles.todayMealCard,
-                      isCurrentMeal && styles.todayMealCardActive,
+                      isPlaceholder && styles.todayMealCardPlaceholder,
+                      isCurrentMeal && !isPlaceholder && styles.todayMealCardActive,
                     ]}
-                    onPress={() => router.push(`/recipe-detail?id=${meal.id}`)}
+                    onPress={() => {
+                      if (isPlaceholder) {
+                        router.push("/meal-planning");
+                      } else {
+                        router.push(`/recipe-detail?id=${meal.id}`);
+                      }
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.todayMealHeader}>
                       <Text style={[
                         styles.todayMealType,
                         { fontFamily: "Inter_600SemiBold" },
-                        isCurrentMeal && styles.todayMealTypeActive,
+                        isPlaceholder && styles.todayMealTypePlaceholder,
+                        isCurrentMeal && !isPlaceholder && styles.todayMealTypeActive,
                       ]}>
                         {mealLabels[mealType]}
                       </Text>
-                      {isCurrentMeal && (
+                      {isCurrentMeal && !isPlaceholder && (
                         <View style={styles.todayMealCheck}>
                           <Text style={styles.todayMealCheckIcon}>✓</Text>
                         </View>
                       )}
                     </View>
-                    <Text 
-                      style={[styles.todayMealName, { fontFamily: "Inter_500Medium" }]}
-                      numberOfLines={2}
-                    >
-                      {meal.name}
-                    </Text>
+                    {isPlaceholder ? (
+                      <Text 
+                        style={[styles.todayMealPlaceholder, { fontFamily: "Inter_400Regular" }]}
+                        numberOfLines={2}
+                      >
+                        No meal scheduled
+                      </Text>
+                    ) : (
+                      <Text 
+                        style={[styles.todayMealName, { fontFamily: "Inter_500Medium" }]}
+                        numberOfLines={2}
+                      >
+                        {meal.name}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -636,33 +651,33 @@ export default function HomeScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.promoBannerOverlay}
           >
-            <View style={styles.promoContent}>
-              <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold" }]}>
-                Identify Any Dish
-              </Text>
+          <View style={styles.promoContent}>
+            <Text style={[styles.promoTitle, { fontFamily: "Inter_700Bold" }]}>
+              Identify Any Dish
+            </Text>
+            <Text
+              style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
+            >
+              Use a photo or type any dish name to get a recipe.
+            </Text>
+            <TouchableOpacity
+              style={styles.promoButton}
+              onPress={handleFoodRecognitionPress}
+            >
+              <Text style={styles.promoButtonIcon}>⚡</Text>
               <Text
-                style={[styles.promoSubtitle, { fontFamily: "Inter_400Regular" }]}
+                style={[
+                  styles.promoButtonText,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
               >
-                Use a photo or type any dish name to get a recipe.
+                Get instant Recipe
               </Text>
-              <TouchableOpacity
-                style={styles.promoButton}
-                onPress={handleFoodRecognitionPress}
-              >
-                <Text style={styles.promoButtonIcon}>⚡</Text>
-                <Text
-                  style={[
-                    styles.promoButtonText,
-                    { fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  Get instant Recipe
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.promoIcon}>
-              <Text style={styles.promoEmoji}>🍜</Text>
-            </View>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.promoIcon}>
+            <Text style={styles.promoEmoji}>🍜</Text>
+          </View>
           </LinearGradient>
         </ImageBackground>
 
@@ -702,7 +717,7 @@ export default function HomeScreen() {
                     Scan Ingredients
                   </Text>
                 </TouchableOpacity>
-              </View>
+        </View>
               <View style={styles.promoIcon}>
                 <Text style={styles.promoEmoji}>🥘</Text>
               </View>
@@ -1164,6 +1179,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#E8E8E8",
   },
+  todayMealCardPlaceholder: {
+    backgroundColor: "#F8F9FA",
+    borderColor: "#E0E0E0",
+    borderStyle: "dashed",
+  },
   todayMealCardActive: {
     borderColor: "#FF9F1C",
     backgroundColor: "#FFFAF5",
@@ -1178,6 +1198,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#888888",
     letterSpacing: 0.5,
+  },
+  todayMealTypePlaceholder: {
+    color: "#BBBBBB",
   },
   todayMealTypeActive: {
     color: "#FF9F1C",
@@ -1199,5 +1222,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1A1A1A",
     lineHeight: 18,
+  },
+  todayMealPlaceholder: {
+    fontSize: 12,
+    color: "#999999",
+    lineHeight: 16,
+    fontStyle: "italic",
   },
 });

@@ -138,15 +138,15 @@ export async function POST(request) {
     const bestMatch = findBestMatch(trimmedDishName, dbMatches, 95);
     
     if (bestMatch) {
-      return Response.json({
-        success: true,
+        return Response.json({
+          success: true,
         type: "recipe",
-        data: {
+          data: {
           recipe: bestMatch.recipe,
-          isGenerated: false,
-        },
-      });
-    }
+            isGenerated: false,
+          },
+        });
+      }
 
     // Step 3: Classify input (specific vs ambiguous)
     let isSpecific = false;

@@ -82,7 +82,6 @@ export async function POST(request) {
 
     // Aggregate ingredients from all meal plans
     const ingredientMap = new Map();
-    let totalEstimatedCost = 0;
 
     mealPlans.forEach((mealPlan) => {
       const ingredients = mealPlan.ingredients || [];
@@ -112,11 +111,6 @@ export async function POST(request) {
                 unit: unit,
                 recipes: new Set([mealPlan.recipe_name]),
                 checked: false,
-                estimated_price: estimateIngredientPrice(
-                  ingredient.name,
-                  amount,
-                  unit,
-                ),
               });
             }
           }
@@ -127,26 +121,16 @@ export async function POST(request) {
             unit: unit,
             recipes: new Set([mealPlan.recipe_name]),
             checked: false,
-            estimated_price: estimateIngredientPrice(
-              ingredient.name,
-              amount,
-              unit,
-            ),
           });
         }
       });
     });
 
-    // Convert map to array and calculate total cost
+    // Convert map to array
     const groceryItems = Array.from(ingredientMap.values()).map((item) => ({
       ...item,
       recipes: Array.from(item.recipes),
     }));
-
-    totalEstimatedCost = groceryItems.reduce(
-      (total, item) => total + (item.estimated_price || 0),
-      0,
-    );
 
     // Check if a grocery list already exists for this date range
     const existingList = await sql`
@@ -165,7 +149,7 @@ export async function POST(request) {
         SET 
           name = ${name || `Grocery List - Week of ${new Date(startDate).toLocaleDateString()}`},
           items = ${JSON.stringify(groceryItems)},
-          estimated_cost = ${totalEstimatedCost},
+          estimated_cost = NULL,
           updated_at = NOW()
         WHERE id = ${existingList[0].id}
         RETURNING *
@@ -182,7 +166,7 @@ export async function POST(request) {
           ${JSON.stringify(groceryItems)},
           ${true},
           ${startDate}::date,
-          ${totalEstimatedCost}
+          NULL
         ) RETURNING *
       `;
     }
@@ -201,78 +185,6 @@ export async function POST(request) {
       { status: 500 },
     );
   }
-}
-
-// Helper function to estimate ingredient prices
-function estimateIngredientPrice(ingredientName, amount, unit) {
-  const name = ingredientName.toLowerCase();
-  const qty = parseFloat(amount) || 1;
-
-  // Basic price estimates in USD (very rough)
-  const priceMap = {
-    // Proteins
-    chicken: 3.5,
-    beef: 5.5,
-    pork: 4.0,
-    fish: 6.0,
-    salmon: 8.0,
-    eggs: 2.5,
-    tofu: 3.0,
-
-    // Vegetables
-    onion: 1.0,
-    garlic: 2.0,
-    tomato: 2.5,
-    potato: 1.5,
-    carrot: 1.5,
-    broccoli: 2.0,
-    spinach: 2.5,
-    "bell pepper": 3.0,
-    mushroom: 3.5,
-
-    // Pantry staples
-    rice: 1.5,
-    pasta: 1.0,
-    flour: 2.0,
-    sugar: 2.0,
-    salt: 1.0,
-    oil: 3.0,
-    butter: 4.0,
-    milk: 3.5,
-    cheese: 5.0,
-
-    // Herbs & spices
-    oregano: 1.5,
-    basil: 2.0,
-    thyme: 1.5,
-    paprika: 2.5,
-    cumin: 2.0,
-
-    // Default
-    default: 2.5,
-  };
-
-  // Find matching ingredient or use default
-  let basePrice = priceMap.default;
-  for (const [key, price] of Object.entries(priceMap)) {
-    if (name.includes(key)) {
-      basePrice = price;
-      break;
-    }
-  }
-
-  // Adjust for quantity and unit
-  let multiplier = 1;
-  if (unit === "lb" || unit === "pound") multiplier = qty;
-  else if (unit === "oz" || unit === "ounce") multiplier = qty / 16;
-  else if (unit === "kg") multiplier = qty * 2.2;
-  else if (unit === "g" || unit === "gram") multiplier = qty / 454;
-  else if (unit === "cup") multiplier = qty * 0.5;
-  else if (unit === "tbsp") multiplier = qty * 0.05;
-  else if (unit === "tsp") multiplier = qty * 0.02;
-  else multiplier = Math.min(qty * 0.25, 2); // Cap at reasonable amount
-
-  return Math.round(basePrice * multiplier * 100) / 100; // Round to 2 decimals
 }
 
 // PUT /api/grocery-lists - Update grocery list (mark items as checked/unchecked)

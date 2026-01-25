@@ -343,7 +343,7 @@ Respond with ONLY a JSON object:
       "instructions": [{"step": 1, "instruction": "Step details"}],
       "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5, "sugar": 8, "sodium": 450, "saturated_fat": 5, "cholesterol": 45, "vitamin_a": 15, "vitamin_c": 20, "calcium": 8, "iron": 12, "potassium": 10},
       "tags": ["quick", "healthy"],
-      "estimated_cost": 8.50
+      "estimated_cost": null
     }
   ]
 }
@@ -1049,7 +1049,7 @@ Respond with ONLY a JSON object in this exact format:
         "potassium": 10
       },
       "tags": ["healthy", "quick", "vegetarian"],
-      "estimated_cost": 8.50
+      "estimated_cost": null
     }
   ]
 }

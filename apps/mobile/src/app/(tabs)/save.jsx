@@ -186,9 +186,9 @@ export default function SavedRecipesScreen() {
           <View style={styles.recipeMeta}>
             <View style={styles.metaItem}>
               <Clock size={12} color="#999999" />
-              <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
+            <Text style={[styles.metaText, { fontFamily: "Inter_400Regular" }]}>
                 {formatTime(recipe.cooking_time)}
-              </Text>
+            </Text>
             </View>
             <Text style={[styles.categoryText, { fontFamily: "Inter_400Regular" }]}>
               {getCategory(recipe)}
@@ -334,17 +334,17 @@ export default function SavedRecipesScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={favoritedRecipes}
+            <FlatList
+              data={favoritedRecipes}
             renderItem={renderRecipeCard}
-            keyExtractor={(item, index) => `favorite-recipe-${item.id}-${index}`}
+              keyExtractor={(item, index) => `favorite-recipe-${item.id}-${index}`}
             numColumns={2}
             contentContainerStyle={[
               styles.gridContent,
               { paddingBottom: insets.bottom + 100 },
             ]}
             columnWrapperStyle={styles.row}
-            showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
             }

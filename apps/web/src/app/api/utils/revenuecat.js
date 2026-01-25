@@ -86,6 +86,150 @@ export async function getSubscriptionStatus(customerId, appUserId) {
 }
 
 /**
+ * Sync subscription status from RevenueCat to database
+ * Validates our database against RevenueCat and updates if mismatch
+ * @param {string} userId - Internal user ID
+ * @param {string} revenuecatCustomerId - RevenueCat customer ID
+ * @returns {Promise<{synced: boolean, wasActive: boolean, isActive: boolean}>}
+ */
+export async function syncSubscriptionFromRevenueCat(userId, revenuecatCustomerId) {
+  if (!REVENUECAT_API_KEY) {
+    console.warn('[Sync] RevenueCat API key not configured, skipping sync');
+    return { synced: false, wasActive: false, isActive: false };
+  }
+
+  try {
+    // Get current status from RevenueCat
+    const customer = await getCustomerInfo(revenuecatCustomerId, userId);
+    
+    // Get first active entitlement (dynamic, not hardcoded)
+    const activeEntitlements = customer.entitlements?.active || {};
+    const activeEntitlement = Object.values(activeEntitlements)[0] || null;
+    const isActiveInRevenueCat = activeEntitlement?.isActive === true;
+    
+    // Get subscription info
+    const subscriptions = customer.subscriptions || {};
+    const activeSubscription = Object.values(subscriptions).find(
+      sub => sub.isActive === true
+    );
+    
+    const plan = activeSubscription?.productIdentifier?.includes('yearly') 
+      ? 'yearly' 
+      : activeSubscription?.productIdentifier?.includes('monthly')
+      ? 'monthly'
+      : null;
+    
+    const expiresAt = activeEntitlement?.expiresDate 
+      ? new Date(activeEntitlement.expiresDate) 
+      : null;
+    
+    const periodStart = activeSubscription?.purchaseDate 
+      ? new Date(activeSubscription.purchaseDate) 
+      : null;
+    
+    const periodEnd = activeSubscription?.expiresDate 
+      ? new Date(activeSubscription.expiresDate) 
+      : expiresAt;
+    
+    const cancelAtPeriodEnd = activeSubscription?.willRenew === false;
+    
+    // Import sql here to avoid circular dependency
+    const sql = (await import('./sql.js')).default;
+    
+    // Get current database status
+    const [dbUser] = await sql`
+      SELECT subscription_status, subscription_expires_at
+      FROM users
+      WHERE id = ${userId}::uuid
+    `;
+    
+    const wasActiveInDb = dbUser?.subscription_status === 'premium' || 
+                          dbUser?.subscription_status === 'trial';
+    
+    // Sync database if there's a mismatch
+    if (isActiveInRevenueCat) {
+      // RevenueCat says active - update database
+      await sql`
+        UPDATE users
+        SET 
+          subscription_status = 'premium',
+          subscription_expires_at = ${expiresAt}::timestamp,
+          updated_at = NOW()
+        WHERE id = ${userId}::uuid
+      `;
+      
+      if (activeSubscription) {
+        // Determine platform from subscription store
+        const platform = activeSubscription.store === 'APP_STORE' ? 'ios' : 
+                        activeSubscription.store === 'PLAY_STORE' ? 'android' : 
+                        null;
+        
+        await sql`
+          INSERT INTO subscriptions (
+            user_id,
+            revenuecat_customer_id,
+            revenuecat_subscription_id,
+            plan,
+            status,
+            current_period_start,
+            current_period_end,
+            cancel_at_period_end,
+            platform
+          )
+          VALUES (
+            ${userId}::uuid,
+            ${revenuecatCustomerId},
+            ${activeSubscription.productIdentifier || 'premium'},
+            ${plan},
+            'active',
+            ${periodStart}::timestamp,
+            ${periodEnd}::timestamp,
+            ${cancelAtPeriodEnd || false},
+            ${platform}
+          )
+          ON CONFLICT (user_id, revenuecat_subscription_id)
+          DO UPDATE SET
+            status = 'active',
+            current_period_start = EXCLUDED.current_period_start,
+            current_period_end = EXCLUDED.current_period_end,
+            cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+            platform = EXCLUDED.platform,
+            updated_at = NOW()
+        `;
+      }
+      
+      console.log(`[Sync] Synced subscription to active for user ${userId}`);
+      return { synced: true, wasActive: wasActiveInDb, isActive: true };
+    } else {
+      // RevenueCat says expired - update database
+      await sql`
+        UPDATE users
+        SET 
+          subscription_status = 'expired',
+          subscription_expires_at = NULL,
+          updated_at = NOW()
+        WHERE id = ${userId}::uuid
+      `;
+      
+      await sql`
+        UPDATE subscriptions
+        SET 
+          status = 'expired',
+          updated_at = NOW()
+        WHERE user_id = ${userId}::uuid
+          AND status = 'active'
+      `;
+      
+      console.log(`[Sync] Synced subscription to expired for user ${userId}`);
+      return { synced: true, wasActive: wasActiveInDb, isActive: false };
+    }
+  } catch (error) {
+    console.error('[Sync] Error syncing subscription from RevenueCat:', error);
+    return { synced: false, wasActive: false, isActive: false };
+  }
+}
+
+/**
  * Verify webhook signature (for production)
  * @param {string} signature - Webhook signature from headers
  * @param {object} payload - Webhook payload

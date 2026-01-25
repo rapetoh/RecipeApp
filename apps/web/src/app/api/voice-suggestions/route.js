@@ -304,7 +304,7 @@ export async function POST(request) {
             ${imageUrl},
             ${JSON.stringify(recipeData.nutrition || {})},
             ${recipeData.tags || []},
-            ${recipeData.estimated_cost || 10.0},
+            ${recipeData.estimated_cost || null},
             ${"ai"},
             ${userId}::uuid,
             ${4.0},
@@ -630,7 +630,7 @@ Respond with ONLY a JSON object:
       "instructions": [{"step": 1, "instruction": "Step details"}],
       "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5, "sugar": 8, "sodium": 450, "saturated_fat": 5, "cholesterol": 45, "vitamin_a": 15, "vitamin_c": 20, "calcium": 8, "iron": 12, "potassium": 10},
       "tags": ["quick", "healthy"],
-      "estimated_cost": 8.50
+      "estimated_cost": null
     }
   ]
 }`;

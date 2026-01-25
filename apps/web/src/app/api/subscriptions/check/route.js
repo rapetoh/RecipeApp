@@ -1,4 +1,5 @@
 import sql from "../../utils/sql.js";
+import { syncSubscriptionFromRevenueCat } from "../../utils/revenuecat.js";
 
 // GET /api/subscriptions/check - Check user's subscription status
 export async function GET(request) {
@@ -28,6 +29,30 @@ export async function GET(request) {
         { success: false, error: "User not found" },
         { status: 404 }
       );
+    }
+
+    // If user has a subscription in our DB, validate with RevenueCat
+    const hasSubscriptionInDb = user.subscription_status === 'premium' || 
+                                user.subscription_status === 'trial';
+    
+    if (hasSubscriptionInDb && user.revenuecat_customer_id) {
+      // Validate with RevenueCat and sync if needed
+      await syncSubscriptionFromRevenueCat(userId, user.revenuecat_customer_id);
+      
+      // Re-fetch user data after sync
+      const [updatedUser] = await sql`
+        SELECT 
+          subscription_status,
+          subscription_expires_at
+        FROM users
+        WHERE id = ${userId}::uuid
+      `;
+      
+      // Update user reference for rest of function
+      if (updatedUser) {
+        user.subscription_status = updatedUser.subscription_status;
+        user.subscription_expires_at = updatedUser.subscription_expires_at;
+      }
     }
 
     // Get active subscription if exists

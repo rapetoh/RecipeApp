@@ -253,6 +253,25 @@ export async function purchasePackage(packageToPurchase, userId = null) {
  */
 export async function restorePurchases(userId = null) {
   try {
+    // First, check if we have subscription in our database
+    const apiUrl = getApiUrl();
+    let dbHasSubscription = false;
+    
+    if (userId) {
+      try {
+        const checkResponse = await fetch(
+          `${apiUrl}/api/subscriptions/check?userId=${userId}`
+        );
+        if (checkResponse.ok) {
+          const checkData = await checkResponse.json();
+          dbHasSubscription = checkData.data?.isPremium === true;
+        }
+      } catch (error) {
+        console.warn('[RevenueCat] Could not check database status:', error);
+      }
+    }
+    
+    // Now try to restore from RevenueCat
     const customerInfo = await Purchases.restorePurchases();
     
     // Get the actual user ID
@@ -267,7 +286,20 @@ export async function restorePurchases(userId = null) {
       const activeEntitlement = getActiveEntitlement(finalCustomerInfo);
       
       if (!activeEntitlement) {
+        // No active subscription in RevenueCat
+        // If our DB had one, it was stale - backend sync will handle it
         console.log('[RevenueCat] No active subscription found after restore');
+        
+        // If DB had subscription but RevenueCat doesn't, trigger sync
+        if (dbHasSubscription) {
+          try {
+            // Trigger sync by calling check endpoint (which validates with RevenueCat)
+            await fetch(`${apiUrl}/api/subscriptions/check?userId=${actualUserId}`);
+          } catch (error) {
+            console.warn('[RevenueCat] Could not trigger sync:', error);
+          }
+        }
+        
         return {
           success: false,
           error: 'No active subscription found. If you have a subscription, make sure you\'re signed in with the same Apple ID used to purchase it.',
@@ -275,7 +307,7 @@ export async function restorePurchases(userId = null) {
         };
       }
       
-      // Verify with backend only if subscription was found
+      // Found active subscription - verify with backend
       await verifyPurchaseWithBackend(finalCustomerInfo, actualUserId);
       
       return {

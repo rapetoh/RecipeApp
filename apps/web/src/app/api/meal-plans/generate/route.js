@@ -134,7 +134,7 @@ export async function POST(request) {
                 ${recipeMetadata.category || mealType},
                 ${recipeMetadata.difficulty || "medium"},
                 ${recipeMetadata.servings || 4},
-                ${recipeMetadata.estimated_cost || 10.0}
+                ${recipeMetadata.estimated_cost || null}
               )
             `;
 

@@ -219,7 +219,7 @@ export async function POST(request) {
             ${imageUrl},
             ${JSON.stringify(recipeData.nutrition || {})},
             ${recipeData.tags || []},
-            ${recipeData.estimated_cost || 10.0},
+            ${recipeData.estimated_cost || null},
             ${"ai"},
             ${userId ? userId : null}::uuid,
             ${4.0},

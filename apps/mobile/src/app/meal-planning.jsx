@@ -313,12 +313,11 @@ export default function MealPlanningScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
 
-      const estimatedCost = Number(data.data?.estimated_cost) || 0;
       const itemCount = data.data?.items ? (Array.isArray(data.data.items) ? data.data.items.length : 0) : 0;
 
       Alert.alert(
         "Grocery List Generated!",
-        `Created a list with ${itemCount} items. Estimated cost: $${estimatedCost.toFixed(2)}`,
+        `Created a list with ${itemCount} items.`,
         [{ text: "OK", style: "default" }],
       );
     },

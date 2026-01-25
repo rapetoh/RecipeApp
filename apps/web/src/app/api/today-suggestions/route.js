@@ -166,7 +166,7 @@ async function generateSuggestionsForDate(userId, date) {
             ${imageUrl},
             ${JSON.stringify(recipeData.nutrition || {})},
             ${recipeData.tags || []},
-            ${recipeData.estimated_cost || 10.0},
+            ${recipeData.estimated_cost || null},
             ${'ai'},
             ${userId}::uuid,
             ${4.0},
@@ -524,7 +524,7 @@ export async function GET(request) {
             ${imageUrl},
             ${JSON.stringify(recipeData.nutrition || {})},
             ${recipeData.tags || []},
-            ${recipeData.estimated_cost || 10.0},
+            ${recipeData.estimated_cost || null},
             ${'ai'},
             ${userId}::uuid,
             ${4.0}, -- Default rating for AI-generated

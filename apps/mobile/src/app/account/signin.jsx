@@ -46,6 +46,7 @@ export default function SignInScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(null);
   const [error, setError] = useState(null);
@@ -225,11 +226,22 @@ export default function SignInScreen() {
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
                 editable={!loading && oauthLoading === null}
               />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                  size={20} 
+                  color="#999" 
+                />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -510,5 +522,8 @@ const styles = StyleSheet.create({
   footerLink: {
     fontSize: 14,
     color: "#FF9F1C",
+  },
+  eyeIcon: {
+    padding: 4,
   },
 });

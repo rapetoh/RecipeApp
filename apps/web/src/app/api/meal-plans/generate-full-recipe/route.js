@@ -91,7 +91,7 @@ export async function POST(request) {
       category: suggestion.category || suggestion.meal_type,
       difficulty: suggestion.difficulty || "medium",
       servings: suggestion.servings || 4,
-      estimated_cost: suggestion.estimated_cost || 10.0,
+      estimated_cost: suggestion.estimated_cost || null,
     };
 
     // Generate full recipe instructions
@@ -121,7 +121,7 @@ export async function POST(request) {
         ${JSON.stringify(fullRecipe.nutrition || suggestion.nutrition || {})},
         ${JSON.stringify(["ai-generated", "meal-plan"])},
         ${"ai"},
-        ${fullRecipe.estimated_cost || suggestion.estimated_cost || 10.0},
+        ${fullRecipe.estimated_cost || suggestion.estimated_cost || null},
         ${null} -- Placeholder image
       ) RETURNING *
     `;
