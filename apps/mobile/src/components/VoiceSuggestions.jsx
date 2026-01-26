@@ -110,11 +110,20 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [isQueryExpanded, setIsQueryExpanded] = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllProgress, setSaveAllProgress] = useState(0);
+  const stepIntervalRef = useRef(null);
 
   // Animation for waveform
   const waveformAnim = useRef(
     Array.from({ length: 20 }, () => new Animated.Value(0.3))
   ).current;
+
+  // Helper function to clear step interval
+  const clearStepInterval = () => {
+    if (stepIntervalRef.current) {
+      clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+  };
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -320,12 +329,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
   const processVoiceInput = async (audioUri) => {
     try {
-      // Step 1: Voice recognized
+      // Step 0: "Got it!"
       setActiveStep(0);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Step 2: Filtering recipes
-      setActiveStep(1);
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       // Convert audio to base64 - React Native compatible
       let base64Audio;
@@ -353,8 +359,21 @@ export default function VoiceSuggestions({ visible, onClose }) {
         console.error("Error converting audio to base64:", conversionError);
         Alert.alert("Error", `Failed to process audio: ${conversionError.message}`);
         setStage("listening");
+        clearStepInterval();
         return;
       }
+
+      // Step 1: "The Chef is Finding the perfect recipes" - Start at 1s
+      setActiveStep(1);
+      
+      // Start automatic step progression during API call
+      let currentStep = 1;
+      stepIntervalRef.current = setInterval(() => {
+        currentStep++;
+        if (currentStep <= 4) { // Steps 1-4 (0-indexed: 1, 2, 3, 4)
+          setActiveStep(currentStep);
+        }
+      }, 4000); // Progress every 4 seconds
 
       // Call API with retry logic for network resilience
       const apiUrl = getApiUrl();
@@ -369,6 +388,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
           mimeType: "audio/m4a",
         }),
       });
+
+      // Clear interval once API responds
+      clearStepInterval();
 
       // Check response status
       if (!result.ok) {
@@ -425,8 +447,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
       const data = await result.json();
 
       if (data.success) {
-        setActiveStep(2); // Checking pantry
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        // Step 4: "Almost there..." - Final step before results
+        setActiveStep(4);
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         setVibeText(data.transcription || "your request");
         setResults(data.recipes || []);
@@ -448,6 +471,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
         startRecording();
       }
     } catch (error) {
+      clearStepInterval();
       console.error("Error processing voice:", error);
       // Provide user-friendly error message for network issues
       const isNetworkError = 
@@ -476,10 +500,21 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
   const processTextInput = async (text) => {
     try {
+      // Step 0: "Got it!"
       setActiveStep(0);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
+      // Step 1: "The Chef is Finding the perfect recipes"
       setActiveStep(1);
+      
+      // Start automatic step progression during API call
+      let currentStep = 1;
+      stepIntervalRef.current = setInterval(() => {
+        currentStep++;
+        if (currentStep <= 4) {
+          setActiveStep(currentStep);
+        }
+      }, 4000); // Progress every 4 seconds
 
       const apiUrl = getApiUrl();
       const result = await fetchWithRetry(`${apiUrl}/api/voice-suggestions`, {
@@ -492,6 +527,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
           text: text,
         }),
       });
+
+      // Clear interval once API responds
+      clearStepInterval();
 
       // Check response status
       if (!result.ok) {
@@ -550,8 +588,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
       const data = await result.json();
 
       if (data.success) {
-        setActiveStep(2);
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        // Step 4: "Almost there..."
+        setActiveStep(4);
+        await new Promise((resolve) => setTimeout(resolve, 600));
 
         setResults(data.recipes || []);
         setStage("results");
@@ -571,6 +610,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setStage("listening");
       }
     } catch (error) {
+      clearStepInterval();
       console.error("Error processing text:", error);
       // Provide user-friendly error message for network issues
       const isNetworkError = 
@@ -588,6 +628,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
   };
 
   const handleTryAgain = () => {
+    clearStepInterval();
     setStage("listening");
     setResults([]);
     setVibeText("");
@@ -699,6 +740,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
   // Cleanup when sheet actually closes
   const handleSheetClose = useCallback(() => {
+    clearStepInterval();
     stopRecording();
     setStage("listening");
     setResults([]);
@@ -929,7 +971,14 @@ export default function VoiceSuggestions({ visible, onClose }) {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             {stage === "results" && (
-              <ChefHat size={28} color="#FF9F1C" />
+              <Image
+                source={require("../../assets/images/icon.png")}
+                style={{
+                  width: 28,
+                  height: 28,
+                }}
+                contentFit="contain"
+              />
             )}
             <Text style={[styles.headerTitle, { fontFamily: "Inter_700Bold" }]}>
               {stage === "listening" && "I'm listening..."}
@@ -1049,77 +1098,41 @@ export default function VoiceSuggestions({ visible, onClose }) {
             />
 
             <View style={styles.stepsContainer}>
-              <View style={styles.step}>
-                <View
-                  style={[
-                    styles.stepIcon,
-                    activeStep >= 0 && styles.stepIconCompleted,
-                  ]}
-                >
-                  {activeStep >= 0 ? (
-                    <Text style={styles.checkmark}>✓</Text>
-                  ) : (
-                    <View style={styles.stepDot} />
-                  )}
+              {[
+                { step: 0, label: "Got it!" },
+                { step: 1, label: "The Chef is Finding the perfect recipes" },
+                { step: 2, label: "Selecting top matches" },
+                { step: 3, label: "Adding special touches" },
+                { step: 4, label: "Almost there..." },
+              ].map((stepConfig, index) => (
+                <View key={index} style={styles.step}>
+                  <View
+                    style={[
+                      styles.stepIcon,
+                      activeStep > stepConfig.step && styles.stepIconCompleted,
+                      activeStep === stepConfig.step && styles.stepIconActive,
+                    ]}
+                  >
+                    {activeStep > stepConfig.step ? (
+                      <Text style={styles.checkmark}>✓</Text>
+                    ) : activeStep === stepConfig.step ? (
+                      <View style={styles.stepDotActive} />
+                    ) : (
+                      <View style={styles.stepDot} />
+                    )}
+                  </View>
+                  <Text
+                    style={[
+                      styles.stepText,
+                      { fontFamily: "Inter_400Regular" },
+                      activeStep > stepConfig.step && styles.stepTextCompleted,
+                      activeStep === stepConfig.step && styles.stepTextActive,
+                    ]}
+                  >
+                    {stepConfig.label}
+                  </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    { fontFamily: "Inter_400Regular" },
-                    activeStep >= 0 && styles.stepTextCompleted,
-                  ]}
-                >
-                  Voice recognized
-                </Text>
-              </View>
-
-              <View style={styles.step}>
-                <View
-                  style={[
-                    styles.stepIcon,
-                    activeStep >= 1 && styles.stepIconActive,
-                  ]}
-                >
-                  {activeStep >= 1 ? (
-                    <View style={styles.stepDotActive} />
-                  ) : (
-                    <View style={styles.stepDot} />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    { fontFamily: "Inter_400Regular" },
-                    activeStep >= 1 && styles.stepTextActive,
-                  ]}
-                >
-                  Filtering recipes...
-                </Text>
-              </View>
-
-              <View style={styles.step}>
-                <View
-                  style={[
-                    styles.stepIcon,
-                    activeStep >= 2 && styles.stepIconActive,
-                  ]}
-                >
-                  {activeStep >= 2 ? (
-                    <View style={styles.stepDotActive} />
-                  ) : (
-                    <View style={styles.stepDot} />
-                  )}
-                </View>
-                <Text
-                  style={[
-                    styles.stepText,
-                    { fontFamily: "Inter_400Regular" },
-                    activeStep >= 2 && styles.stepTextActive,
-                  ]}
-                >
-                  Checking pantry
-                </Text>
-              </View>
+              ))}
             </View>
           </View>
         )}
