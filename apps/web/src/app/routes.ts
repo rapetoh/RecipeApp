@@ -6,6 +6,9 @@ export default [
   index('./page.jsx'),
   route('account/signin', './account/signin/page.jsx'),
   route('account/signup', './account/signup/page.jsx'),
+  route('privacy', './privacy/page.jsx'),
+  route('terms', './terms/page.jsx'),
+  route('support', './support/page.jsx'),
   route('*', './+not-found.tsx'),
 ];
 

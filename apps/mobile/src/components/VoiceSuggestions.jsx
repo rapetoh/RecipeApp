@@ -36,8 +36,20 @@ import UpgradePrompt from "@/components/UpgradePrompt";
 import { getApiUrl } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width: screenWidth } = Dimensions.get("window");
+
+// Module-level refs for AbortController (survives component unmount)
+let globalAbortController = null;
+let globalRequestId = null;
+
+// AsyncStorage keys
+const STORAGE_KEYS = {
+  VOICE_REQUEST_STATE: '@voice_request_state',
+  VOICE_RESULTS: '@voice_results',
+  VOICE_VIBE_TEXT: '@voice_vibe_text',
+};
 const CARD_MARGIN = 8;
 const CARD_PADDING = 16;
 // Account for BottomSheet structure: contentContainer (20px) + gridContent (16px) padding on each side
@@ -47,23 +59,52 @@ const recipeCardWidth = (screenWidth - (HORIZONTAL_PADDING * 2) - CARD_MARGIN) /
 /**
  * Fetch with timeout and automatic retry for network resilience
  * Handles iOS background/foreground transitions that can break network connections
+ * Supports external abort signal for cancellation
  */
 const fetchWithRetry = async (url, options = {}, maxRetries = 2) => {
   const timeout = 60000; // 60 second timeout for voice processing (AI can be slow)
+  const externalSignal = options.signal; // Get external abort signal if provided
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    // Check if external signal is already aborted
+    if (externalSignal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeout);
+    
+    // Combine external signal with timeout signal
+    let combinedSignal = timeoutController.signal;
+    if (externalSignal) {
+      // Create a combined signal that aborts if either signal aborts
+      const combinedController = new AbortController();
+      const abortCombined = () => combinedController.abort();
+      externalSignal.addEventListener('abort', abortCombined);
+      timeoutController.signal.addEventListener('abort', abortCombined);
+      combinedSignal = combinedController.signal;
+    }
     
     try {
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal,
+        signal: combinedSignal,
       });
       clearTimeout(timeoutId);
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', () => {});
+      }
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', () => {});
+      }
+      
+      // If aborted by external signal, don't retry
+      if (error.name === 'AbortError' && externalSignal?.aborted) {
+        throw error;
+      }
       
       // Check if error is retryable (network issues, timeouts, aborts)
       const isRetryable = 
@@ -111,6 +152,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllProgress, setSaveAllProgress] = useState(0);
   const stepIntervalRef = useRef(null);
+  const abortControllerRef = useRef(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Animation for waveform
   const waveformAnim = useRef(
@@ -122,6 +165,131 @@ export default function VoiceSuggestions({ visible, onClose }) {
     if (stepIntervalRef.current) {
       clearInterval(stepIntervalRef.current);
       stepIntervalRef.current = null;
+    }
+  };
+
+  // Save request state to AsyncStorage
+  const saveRequestState = async (state) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.VOICE_REQUEST_STATE, JSON.stringify({
+        ...state,
+        timestamp: Date.now(),
+        startTime: state.startTime || Date.now(), // Save when processing started
+      }));
+    } catch (error) {
+      console.error('Error saving request state:', error);
+    }
+  };
+
+  // Load request state from AsyncStorage
+  const loadRequestState = async () => {
+    try {
+      const stateStr = await AsyncStorage.getItem(STORAGE_KEYS.VOICE_REQUEST_STATE);
+      if (stateStr) {
+        const state = JSON.parse(stateStr);
+        // Check if state is not too old (e.g., 5 minutes)
+        if (Date.now() - state.timestamp < 5 * 60 * 1000) {
+          return state;
+        } else {
+          // Clear stale state
+          await clearRequestState();
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading request state:', error);
+      return null;
+    }
+  };
+
+  // Clear all request state from AsyncStorage
+  const clearRequestState = async () => {
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.VOICE_REQUEST_STATE,
+        STORAGE_KEYS.VOICE_RESULTS,
+        STORAGE_KEYS.VOICE_VIBE_TEXT,
+      ]);
+    } catch (error) {
+      console.error('Error clearing request state:', error);
+    }
+  };
+
+  // Restore state when sheet opens
+  const restoreRequestState = async () => {
+    const savedState = await loadRequestState();
+    if (savedState) {
+      if (savedState.stage === 'processing') {
+        // Check if we have results (request might have completed)
+        try {
+          const resultsStr = await AsyncStorage.getItem(STORAGE_KEYS.VOICE_RESULTS);
+          const vibeText = await AsyncStorage.getItem(STORAGE_KEYS.VOICE_VIBE_TEXT);
+          
+          if (resultsStr) {
+            // Request completed, show results
+            const results = JSON.parse(resultsStr);
+            setResults(results);
+            setVibeText(vibeText || '');
+            setStage('results');
+            setIsProcessing(false);
+            await clearRequestState();
+          } else {
+            // Still processing - restore state and restart step progression
+            setStage('processing');
+            setIsProcessing(true);
+            setVibeText(vibeText || '');
+            
+            // Calculate current step based on elapsed time
+            // Step 0: 0-600ms, Step 1: 600-4600ms, Step 2: 4600-8600ms, Step 3: 8600-12600ms, Step 4: 12600+
+            const startTime = savedState.startTime || savedState.timestamp;
+            const elapsed = Date.now() - startTime;
+            let calculatedStep = 1; // Default to step 1
+            if (elapsed < 600) {
+              calculatedStep = 0;
+            } else if (elapsed < 4600) {
+              calculatedStep = 1;
+            } else if (elapsed < 8600) {
+              calculatedStep = 2;
+            } else if (elapsed < 12600) {
+              calculatedStep = 3;
+            } else {
+              calculatedStep = 4;
+            }
+            
+            setActiveStep(calculatedStep);
+            
+            // Restart step progression interval
+            // Clear any existing interval first
+            clearStepInterval();
+            
+            let currentStep = calculatedStep;
+            stepIntervalRef.current = setInterval(() => {
+              currentStep++;
+              if (currentStep <= 4) {
+                setActiveStep(currentStep);
+              }
+            }, 4000); // Progress every 4 seconds
+          }
+        } catch (error) {
+          console.error('Error restoring state:', error);
+          // If error, clear and start fresh
+          await clearRequestState();
+        }
+      } else if (savedState.stage === 'results') {
+        try {
+          const resultsStr = await AsyncStorage.getItem(STORAGE_KEYS.VOICE_RESULTS);
+          const vibeText = await AsyncStorage.getItem(STORAGE_KEYS.VOICE_VIBE_TEXT);
+          if (resultsStr) {
+            setResults(JSON.parse(resultsStr));
+            setVibeText(vibeText || '');
+            setStage('results');
+            setIsProcessing(false);
+          }
+        } catch (error) {
+          console.error('Error restoring results:', error);
+          await clearRequestState();
+        }
+      }
     }
   };
 
@@ -141,11 +309,21 @@ export default function VoiceSuggestions({ visible, onClose }) {
       setSheetIndex(0);
       // Reset recording attempt flag when sheet opens
       recordingAttemptedRef.current = false;
+      // Restore state when sheet opens
+      restoreRequestState();
     } else {
       // Set index to -1 to close the sheet
       setSheetIndex(-1);
       stopRecording();
       recordingAttemptedRef.current = false;
+      // DON'T reset state if processing - let it continue
+      if (!isProcessing) {
+        setStage("listening");
+        setResults([]);
+        setVibeText("");
+        setInvalidMessage("");
+        setActiveStep(0);
+      }
     }
   }, [visible]);
 
@@ -329,6 +507,18 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
   const processVoiceInput = async (audioUri) => {
     try {
+      // Create new AbortController
+      abortControllerRef.current = new AbortController();
+      globalAbortController = abortControllerRef.current;
+      const requestId = Date.now().toString();
+      globalRequestId = requestId;
+      const startTime = Date.now(); // Save start time for step calculation
+      
+      // Save initial state with startTime
+      await saveRequestState({ stage: 'processing', requestId, startTime });
+      setIsProcessing(true);
+      setStage('processing');
+
       // Step 0: "Got it!"
       setActiveStep(0);
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -359,7 +549,9 @@ export default function VoiceSuggestions({ visible, onClose }) {
         console.error("Error converting audio to base64:", conversionError);
         Alert.alert("Error", `Failed to process audio: ${conversionError.message}`);
         setStage("listening");
+        setIsProcessing(false);
         clearStepInterval();
+        await clearRequestState();
         return;
       }
 
@@ -375,7 +567,7 @@ export default function VoiceSuggestions({ visible, onClose }) {
         }
       }, 4000); // Progress every 4 seconds
 
-      // Call API with retry logic for network resilience
+      // Call API with retry logic and abort signal
       const apiUrl = getApiUrl();
       const result = await fetchWithRetry(`${apiUrl}/api/voice-suggestions`, {
         method: "POST",
@@ -387,10 +579,16 @@ export default function VoiceSuggestions({ visible, onClose }) {
           audio: base64Audio,
           mimeType: "audio/m4a",
         }),
+        signal: abortControllerRef.current.signal, // Add abort signal
       });
 
       // Clear interval once API responds
       clearStepInterval();
+
+      // Check if request was aborted
+      if (abortControllerRef.current?.signal.aborted) {
+        return; // Request was cancelled
+      }
 
       // Check response status
       if (!result.ok) {
@@ -415,6 +613,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
           setUpgradeUsage(usage);
           setShowUpgradePrompt(true);
           setStage("listening");
+          setIsProcessing(false);
+          await clearRequestState();
           if (Platform.OS !== "web") {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           }
@@ -432,6 +632,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
             setVibeText(transcription || "your request");
           }
           setStage("error");
+          setIsProcessing(false);
+          await clearRequestState();
           if (Platform.OS !== "web") {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
@@ -441,6 +643,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
         console.error("API error:", result.status, errorMessage);
         Alert.alert("Error", errorMessage);
         setStage("listening");
+        setIsProcessing(false);
+        await clearRequestState();
         return;
       }
 
@@ -451,15 +655,24 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setActiveStep(4);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
+        // Save results to AsyncStorage
+        await AsyncStorage.setItem(STORAGE_KEYS.VOICE_RESULTS, JSON.stringify(data.recipes || []));
+        await AsyncStorage.setItem(STORAGE_KEYS.VOICE_VIBE_TEXT, data.transcription || '');
+        await saveRequestState({ stage: 'results', requestId });
+
         setVibeText(data.transcription || "your request");
         setResults(data.recipes || []);
         setStage("results");
+        setIsProcessing(false);
+        // Don't clear request state here - keep results for when user reopens
       } else {
         // Handle invalid input response
         if (data.type === "invalid") {
           setInvalidMessage(data.error || "This doesn't seem to be a food-related request. Please try asking about recipes or meals.");
           setVibeText(data.transcription || transcription || "your request");
           setStage("error");
+          setIsProcessing(false);
+          await clearRequestState();
           if (Platform.OS !== "web") {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
@@ -468,10 +681,22 @@ export default function VoiceSuggestions({ visible, onClose }) {
         
         Alert.alert("Error", data.error || "Failed to process voice input");
         setStage("listening");
+        setIsProcessing(false);
+        await clearRequestState();
         startRecording();
       }
     } catch (error) {
       clearStepInterval();
+      
+      // Check if error is from abort
+      if (error.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
+        console.log('Request was cancelled');
+        setIsProcessing(false);
+        setStage('listening');
+        await clearRequestState();
+        return;
+      }
+      
       console.error("Error processing voice:", error);
       // Provide user-friendly error message for network issues
       const isNetworkError = 
@@ -485,6 +710,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
       
       Alert.alert("Error", userMessage);
       setStage("listening");
+      setIsProcessing(false);
+      await clearRequestState();
       startRecording();
     }
   };
@@ -500,6 +727,18 @@ export default function VoiceSuggestions({ visible, onClose }) {
 
   const processTextInput = async (text) => {
     try {
+      // Create new AbortController
+      abortControllerRef.current = new AbortController();
+      globalAbortController = abortControllerRef.current;
+      const requestId = Date.now().toString();
+      globalRequestId = requestId;
+      const startTime = Date.now(); // Save start time for step calculation
+      
+      // Save initial state with startTime
+      await saveRequestState({ stage: 'processing', requestId, startTime });
+      setIsProcessing(true);
+      setStage('processing');
+
       // Step 0: "Got it!"
       setActiveStep(0);
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -526,10 +765,16 @@ export default function VoiceSuggestions({ visible, onClose }) {
           userId: auth?.user?.id,
           text: text,
         }),
+        signal: abortControllerRef.current.signal, // Add abort signal
       });
 
       // Clear interval once API responds
       clearStepInterval();
+
+      // Check if request was aborted
+      if (abortControllerRef.current?.signal.aborted) {
+        return; // Request was cancelled
+      }
 
       // Check response status
       if (!result.ok) {
@@ -555,6 +800,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
             setVibeText(text || "your request");
           }
           setStage("error");
+          setIsProcessing(false);
+          await clearRequestState();
           if (Platform.OS !== "web") {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
@@ -569,6 +816,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
               setUpgradeUsage(errorData.usage || null);
               setShowUpgradePrompt(true);
               setStage("listening");
+              setIsProcessing(false);
+              await clearRequestState();
               if (Platform.OS !== "web") {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
               }
@@ -582,6 +831,8 @@ export default function VoiceSuggestions({ visible, onClose }) {
         console.error("API error:", result.status, errorMessage);
         Alert.alert("Error", errorMessage);
         setStage("listening");
+        setIsProcessing(false);
+        await clearRequestState();
         return;
       }
 
@@ -592,14 +843,23 @@ export default function VoiceSuggestions({ visible, onClose }) {
         setActiveStep(4);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
+        // Save results to AsyncStorage
+        await AsyncStorage.setItem(STORAGE_KEYS.VOICE_RESULTS, JSON.stringify(data.recipes || []));
+        await AsyncStorage.setItem(STORAGE_KEYS.VOICE_VIBE_TEXT, text || '');
+        await saveRequestState({ stage: 'results', requestId });
+
         setResults(data.recipes || []);
         setStage("results");
+        setIsProcessing(false);
+        // Don't clear request state here - keep results for when user reopens
       } else {
         // Handle invalid input response
         if (data.type === "invalid") {
           setInvalidMessage(data.error || "This doesn't seem to be a food-related request. Please try asking about recipes or meals.");
           setVibeText(data.transcription || text || "your request");
           setStage("error");
+          setIsProcessing(false);
+          await clearRequestState();
           if (Platform.OS !== "web") {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
@@ -608,9 +868,21 @@ export default function VoiceSuggestions({ visible, onClose }) {
         
         Alert.alert("Error", data.error || "Failed to process request");
         setStage("listening");
+        setIsProcessing(false);
+        await clearRequestState();
       }
     } catch (error) {
       clearStepInterval();
+      
+      // Check if error is from abort
+      if (error.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
+        console.log('Request was cancelled');
+        setIsProcessing(false);
+        setStage('listening');
+        await clearRequestState();
+        return;
+      }
+      
       console.error("Error processing text:", error);
       // Provide user-friendly error message for network issues
       const isNetworkError = 
@@ -624,16 +896,47 @@ export default function VoiceSuggestions({ visible, onClose }) {
       
       Alert.alert("Error", userMessage);
       setStage("listening");
+      setIsProcessing(false);
+      await clearRequestState();
     }
   };
 
-  const handleTryAgain = () => {
+  // Cancel active request
+  const handleCancelRequest = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      globalAbortController = null;
+    }
     clearStepInterval();
+    setIsProcessing(false);
+    setStage('listening');
+    setResults([]);
+    setVibeText("");
+    setInvalidMessage("");
+    setActiveStep(0);
+    await clearRequestState();
+    
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const handleTryAgain = async () => {
+    // Cancel any active request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      globalAbortController = null;
+    }
+    clearStepInterval();
+    await clearRequestState(); // Clear all persisted state
     setStage("listening");
     setResults([]);
     setVibeText("");
     setInvalidMessage("");
     setActiveStep(0);
+    setIsProcessing(false);
     recordingAttemptedRef.current = false;
     // Wait a bit before starting recording again
     setTimeout(() => {
@@ -742,15 +1045,18 @@ export default function VoiceSuggestions({ visible, onClose }) {
   const handleSheetClose = useCallback(() => {
     clearStepInterval();
     stopRecording();
-    setStage("listening");
-    setResults([]);
-    setVibeText("");
-    setInvalidMessage("");
-    setActiveStep(0);
+    // Only reset if not processing - let processing continue
+    if (!isProcessing) {
+      setStage("listening");
+      setResults([]);
+      setVibeText("");
+      setInvalidMessage("");
+      setActiveStep(0);
+    }
     recordingAttemptedRef.current = false;
     setSheetIndex(-1);
     onClose();
-  }, [onClose]);
+  }, [onClose, isProcessing]);
 
   const handleRecipePress = (recipe) => {
     router.push(`/recipe-detail?id=${recipe.id}`);
@@ -1134,6 +1440,22 @@ export default function VoiceSuggestions({ visible, onClose }) {
                 </View>
               ))}
             </View>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancelRequest}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.cancelButtonText,
+                  { fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1896,6 +2218,18 @@ const styles = StyleSheet.create({
   gridCategoryText: {
     fontSize: 11,
     color: "#999999",
+  },
+  cancelButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: "#F0F0F0",
+    alignItems: "center",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#666666",
   },
 });
 

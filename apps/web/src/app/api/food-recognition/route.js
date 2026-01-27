@@ -203,14 +203,14 @@ export async function POST(request) {
               LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
               LOWER(r.description) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) OR
               LOWER(r.cuisine) = LOWER(${analysisJson.cuisine})
-            )
+      )
             AND r.average_rating >= 4.0
           ) unique_recipes
           JOIN recipes r ON unique_recipes.id = r.id
-          ORDER BY 
+      ORDER BY 
             CASE WHEN LOWER(r.name) LIKE LOWER(${"%" + analysisJson.dish_name + "%"}) THEN 1 ELSE 2 END,
             r.average_rating DESC
-          LIMIT 5
+      LIMIT 5
         `
       : []; // If no userId, return empty array (don't show any similar recipes)
 
@@ -220,7 +220,7 @@ export async function POST(request) {
     // Check for 95%+ similarity match - use DB recipe if found
     if (similarRecipes.length > 0) {
       const bestMatch = findBestMatch(analysisJson.dish_name, similarRecipes, 95);
-      
+
       if (bestMatch) {
         generatedRecipe = bestMatch.recipe;
         useExistingRecipe = true;

@@ -303,11 +303,27 @@ export default function SubscriptionPlansScreen() {
 
         {/* Footer Links */}
         <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={() => {}} activeOpacity={0.7}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push("/legal-center");
+            }} 
+            activeOpacity={0.7}
+          >
             <Text style={[styles.footerLink, { fontFamily: "Inter_400Regular" }]}>Terms</Text>
           </TouchableOpacity>
           <Text style={styles.footerSeparator}>•</Text>
-          <TouchableOpacity onPress={() => {}} activeOpacity={0.7}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push("/legal-center");
+            }} 
+            activeOpacity={0.7}
+          >
             <Text style={[styles.footerLink, { fontFamily: "Inter_400Regular" }]}>Privacy</Text>
           </TouchableOpacity>
           <Text style={styles.footerSeparator}>•</Text>
