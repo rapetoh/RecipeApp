@@ -172,7 +172,7 @@ export default function LegalCenterScreen() {
                 We value your privacy. This summary explains how PocketChef processes your data to provide personalized meal planning and recipe suggestions.
               </Text>
               <Text style={[styles.lastUpdated, { fontFamily: "Inter_400Regular" }]}>
-                Last updated: December 28, 2024
+                Last updated: January 27, 2026
               </Text>
             </View>
 
@@ -242,7 +242,7 @@ export default function LegalCenterScreen() {
                 By using PocketChef, you agree to our Terms of Use. This includes subscription terms, user responsibilities, and service limitations.
               </Text>
               <Text style={[styles.lastUpdated, { fontFamily: "Inter_400Regular" }]}>
-                Last updated: December 28, 2024
+                Last updated: January 27, 2026
               </Text>
             </View>
 

@@ -56,7 +56,7 @@ export default function SupportPage() {
         </div>
         
         <div style={styles.footer}>
-          <p>&copy; 2024 PocketChef. All rights reserved.</p>
+          <p>&copy; 2026 PocketChef. All rights reserved.</p>
         </div>
       </div>
     </div>

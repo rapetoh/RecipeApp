@@ -5,7 +5,7 @@ export default function PrivacyPolicyPage() {
         <div style={styles.header}>
           <div style={styles.logo}>PocketChef</div>
           <h1 style={styles.title}>Privacy Policy</h1>
-          <p style={styles.lastUpdated}>Last Updated: December 28, 2024</p>
+          <p style={styles.lastUpdated}>Last Updated: January 27, 2026</p>
         </div>
         
         <div style={styles.section}>
@@ -127,7 +127,7 @@ export default function PrivacyPolicyPage() {
         </div>
         
         <div style={styles.footer}>
-          <p>&copy; 2024 PocketChef. All rights reserved.</p>
+          <p>&copy; 2026 PocketChef. All rights reserved.</p>
         </div>
       </div>
     </div>

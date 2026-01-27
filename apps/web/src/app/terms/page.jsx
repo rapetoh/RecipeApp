@@ -5,7 +5,7 @@ export default function TermsOfUsePage() {
         <div style={styles.header}>
           <div style={styles.logo}>PocketChef</div>
           <h1 style={styles.title}>Terms of Use</h1>
-          <p style={styles.lastUpdated}>Last Updated: December 28, 2024</p>
+          <p style={styles.lastUpdated}>Last Updated: January 27, 2026</p>
         </div>
         
         <div style={styles.section}>
@@ -147,7 +147,7 @@ export default function TermsOfUsePage() {
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>14. Governing Law</h2>
           <p style={styles.paragraph}>
-            These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which PocketChef operates, without regard to its conflict of law provisions.
+            These Terms shall be governed by and construed in accordance with the laws of the United States, without regard to its conflict of law provisions.
           </p>
         </div>
         
@@ -161,7 +161,7 @@ export default function TermsOfUsePage() {
         </div>
         
         <div style={styles.footer}>
-          <p>&copy; 2024 PocketChef. All rights reserved.</p>
+          <p>&copy; 2026 PocketChef. All rights reserved.</p>
         </div>
       </div>
     </div>
