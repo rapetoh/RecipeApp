@@ -25,7 +25,7 @@ export default function SplashScreen({ fontsLoaded = true }) {
 
       {/* App Name */}
       <View style={styles.nameContainer}>
-        <Text style={[styles.appName, fontsLoaded && { fontFamily: 'Inter_700Bold' }]}>
+      <Text style={[styles.appName, fontsLoaded && { fontFamily: 'Inter_700Bold' }]}>
           PocketChef
         </Text>
         <View style={styles.orangeDot} />

@@ -104,7 +104,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
             >
               <View style={styles.tabContent}>
                 <View style={[styles.iconContainer, active && styles.iconContainerActive]}>
-                  <IconComponent size={22} color={iconColor} />
+                <IconComponent size={22} color={iconColor} />
                 </View>
                 <Text style={[styles.tabLabel, { color: labelColor }, active && styles.tabLabelActive]}>
                   {tab.title}

@@ -98,8 +98,8 @@ export default function OnboardingNotificationsScreen() {
       if (status === "granted") {
         // Try to get push token, but don't fail if it doesn't work
         try {
-          const token = await Notifications.getExpoPushTokenAsync();
-          console.log("Notification permission granted. Push token:", token.data);
+        const token = await Notifications.getExpoPushTokenAsync();
+        console.log("Notification permission granted. Push token:", token.data);
         } catch (tokenError) {
           // Silently ignore - likely missing entitlement in dev build
           console.log("Could not get push token (expected in dev builds without entitlement)");
