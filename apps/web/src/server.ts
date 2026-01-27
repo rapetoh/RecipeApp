@@ -79,7 +79,7 @@ app.use('*', initAuthConfig((c) => {
   
   // Always use HTTPS in production (Render always uses HTTPS)
   const protocol = 'https';
-  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
+  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'pocketchef.space';
   authConfig.url = `${protocol}://${host}`;
   
   return authConfig;
@@ -155,7 +155,7 @@ app.get('/api/auth/signup', (c) => {
 app.get('/api/auth/oauth/:provider', async (c) => {
   const provider = c.req.param('provider');
   const protocol = 'https';
-  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'recipe-app-web-xtnu.onrender.com';
+  const host = c.req.header('host') || c.req.header('x-forwarded-host') || 'pocketchef.space';
   const baseUrl = `${protocol}://${host}`;
   
   // Use a query parameter to track mobile OAuth flows
