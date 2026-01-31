@@ -367,12 +367,12 @@ export default function Home() {
             </div>
 
             {/* Voice Feature - Tall Card */}
-            <div className="md:row-span-2 bg-gray-900 text-white rounded-2xl md:rounded-3xl p-6 md:p-8 flex flex-col border border-black/[0.03]">
-              <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center mb-6">
-                <Mic className="w-6 h-6 text-white" />
+            <div className="md:row-span-2 rounded-2xl md:rounded-3xl p-6 md:p-8 flex flex-col border-2 border-orange-200 bg-gradient-to-br from-white via-orange-50 to-orange-100">
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-6">
+                <Mic className="w-6 h-6 text-orange-600" />
               </div>
-              <h3 className="text-xl md:text-2xl font-semibold text-white mb-6">Just say the word</h3>
-              <p className="text-sm md:text-base text-gray-300 mb-8 flex-1">
+              <h3 className="text-xl md:text-2xl font-semibold text-gray-900 mb-6">Just say the word</h3>
+              <p className="text-sm md:text-base text-gray-600 mb-8 flex-1">
                 "I want something spicy for dinner."<br /><br />
                 The Vibe feature understands context, mood, and dietary needs instantly.
               </p>
@@ -381,13 +381,14 @@ export default function Home() {
                 {[...Array(6)].map((_, i) => (
                   <div
                     key={i}
-                    className="bg-green-500 rounded animate-waveform"
+                    className="bg-orange-500 rounded animate-waveform"
                     style={{
                       width: '6px',
                       height: `${[24, 48, 32, 64, 40, 24][i]}px`,
                       opacity: [0.5, 1, 0.8, 1, 0.8, 0.5][i],
                       animationDelay: `${i * 0.15}s`,
-                      boxShadow: i === 3 ? '0 0 20px rgba(16, 185, 129, 0.5)' : 'none',
+                      boxShadow: i === 3 ? '0 0 20px rgba(249, 115, 22, 0.5)' : 'none',
+                      background: `linear-gradient(to bottom, #fb923c, #ea580c)`,
                     }}
                   />
                 ))}
