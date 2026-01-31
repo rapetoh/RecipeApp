@@ -315,7 +315,8 @@ app.use('/api/auth/*', async (c, next) => {
 // After Auth.js completes OAuth callback, it redirects to "/"
 // We detect mobile OAuth completion using User-Agent + fresh session
 // This is more reliable than trying to intercept/modify the Auth.js redirect
-app.get('/', verifyAuth(), async (c, next) => {
+// NOTE: Root route is public - no auth required for landing page
+app.get('/', async (c, next) => {
   const userAgent = c.req.header('User-Agent') || '';
   
   // Detect mobile browser/WebView
@@ -327,47 +328,60 @@ app.get('/', verifyAuth(), async (c, next) => {
   
   console.log('🔐 GET / accessed, User-Agent mobile:', isMobile);
   
-  const authUser = c.get('authUser');
-  
-  // If mobile browser AND has session, check if it's a fresh OAuth completion
-  if (isMobile && authUser?.session && authUser?.user) {
+  // Only check auth for mobile browsers (for OAuth flow detection)
+  // For regular web browsers, skip auth check and let React Router handle the page
+  if (isMobile) {
     try {
-      const { session, user } = authUser;
+      // Try to get auth user, but don't fail if not authenticated
+      const authMiddleware = verifyAuth();
+      await authMiddleware(c, async () => {});
       
-      // Check if session is fresh (created within last 2 minutes)
-      // Session expires ~30 days from creation, so expires > 29 days from now = fresh
-      const expires = new Date((session as any).expires);
-      const twentyNineDaysFromNow = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000);
-      const isFreshSession = expires > twentyNineDaysFromNow;
+      const authUser = c.get('authUser');
       
-      console.log('🔐 Session expires:', expires.toISOString());
-      console.log('🔐 Is fresh session:', isFreshSession);
-      
-      if (isFreshSession) {
-        console.log('🔐 Mobile OAuth completion detected via User-Agent + fresh session');
-        
-        const sessionAny = session as any;
-        const jwt = sessionAny.sessionToken || sessionAny.id;
-        const userData = {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-        };
-        
-        console.log('✅ Mobile OAuth complete - redirecting to app for user:', user.email);
-        
-        // Redirect to mobile app with token
-        const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
-        return c.redirect(redirectUrl);
+      // If mobile browser AND has session, check if it's a fresh OAuth completion
+      if (authUser?.session && authUser?.user) {
+        try {
+          const { session, user } = authUser;
+          
+          // Check if session is fresh (created within last 2 minutes)
+          // Session expires ~30 days from creation, so expires > 29 days from now = fresh
+          const expires = new Date((session as any).expires);
+          const twentyNineDaysFromNow = new Date(Date.now() + 29 * 24 * 60 * 60 * 1000);
+          const isFreshSession = expires > twentyNineDaysFromNow;
+          
+          console.log('🔐 Session expires:', expires.toISOString());
+          console.log('🔐 Is fresh session:', isFreshSession);
+          
+          if (isFreshSession) {
+            console.log('🔐 Mobile OAuth completion detected via User-Agent + fresh session');
+            
+            const sessionAny = session as any;
+            const jwt = sessionAny.sessionToken || sessionAny.id;
+            const userData = {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              image: user.image,
+            };
+            
+            console.log('✅ Mobile OAuth complete - redirecting to app for user:', user.email);
+            
+            // Redirect to mobile app with token
+            const redirectUrl = `recipeapp://oauth/callback?jwt=${encodeURIComponent(jwt)}&user=${encodeURIComponent(JSON.stringify(userData))}`;
+            return c.redirect(redirectUrl);
+          }
+        } catch (error) {
+          console.error('❌ Mobile OAuth completion error:', error);
+          // Don't redirect to error - just continue to normal page
+        }
       }
     } catch (error) {
-      console.error('❌ Mobile OAuth completion error:', error);
-      // Don't redirect to error - just continue to normal page
+      // Auth check failed (user not authenticated) - that's fine, continue to normal page
+      console.log('🔐 No auth session for mobile browser, continuing to normal page');
     }
   }
   
-  // Not a mobile OAuth flow - continue to normal handling
+  // Not a mobile OAuth flow - continue to normal handling (React Router will serve the landing page)
   return next();
 });
 
