@@ -4,8 +4,8 @@ import './global.css';
 export const links = () => [
   {
     rel: 'icon',
-    type: 'image/png',
-    href: '/assets/images/icon.png',
+    type: 'image/svg+xml',
+    href: '/favicon.svg',
   },
   {
     rel: 'apple-touch-icon',
