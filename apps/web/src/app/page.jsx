@@ -25,8 +25,7 @@ export default function Home() {
   ]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(false);
   
-  // Placeholder for App Store link - replace when available
-  const appStoreLink = "#"; // Replace with actual App Store link
+  const appStoreLink = "https://apps.apple.com/us/app/pocketchef-meal-planner/id6757957197";
 
   // Fetch packages from API
   useEffect(() => {

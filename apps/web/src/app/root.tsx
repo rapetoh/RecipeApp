@@ -3,6 +3,15 @@ import './global.css';
 
 export const links = () => [
   {
+    rel: 'icon',
+    type: 'image/png',
+    href: '/assets/images/icon.png',
+  },
+  {
+    rel: 'apple-touch-icon',
+    href: '/assets/images/icon.png',
+  },
+  {
     rel: 'preconnect',
     href: 'https://fonts.googleapis.com',
   },
@@ -23,6 +32,8 @@ export function Layout({ children }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>PocketChef - AI Recipe & Meal Planner</title>
+        <meta name="description" content="Discover recipes by photo, voice, or ingredients. Plan meals, generate grocery lists, and cook step-by-step with AI-powered guidance." />
         <Meta />
         <Links />
       </head>
