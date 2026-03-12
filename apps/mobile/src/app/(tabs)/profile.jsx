@@ -331,8 +331,8 @@ export default function ProfileScreen() {
                     Manage Subscription
                   </Text>
                 </TouchableOpacity>
-              </View>
-            ) : (
+          </View>
+        ) : (
               <TouchableOpacity
                 style={styles.upgradeCard}
                 onPress={() => {

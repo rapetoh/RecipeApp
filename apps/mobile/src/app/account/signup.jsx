@@ -175,11 +175,11 @@ export default function SignUpScreen() {
 
         {/* White Content Area */}
         <View style={styles.emailContentContainer}>
-          <ScrollView
+        <ScrollView
             contentContainerStyle={styles.emailModernScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
             {error && (
               <View style={styles.errorContainer}>
                 <Ionicons name="alert-circle" size={18} color="#DC2626" />
@@ -280,7 +280,7 @@ export default function SignUpScreen() {
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
           </ScrollView>
-        </View>
+          </View>
       </KeyboardAvoidingView>
     );
   }
