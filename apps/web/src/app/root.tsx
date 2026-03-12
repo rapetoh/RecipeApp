@@ -4,12 +4,12 @@ import './global.css';
 export const links = () => [
   {
     rel: 'icon',
-    type: 'image/svg+xml',
-    href: '/favicon.svg',
+    type: 'image/png',
+    href: '/assets/images/icon-rounded.png',
   },
   {
     rel: 'apple-touch-icon',
-    href: '/assets/images/icon.png',
+    href: '/assets/images/icon-rounded.png',
   },
   {
     rel: 'preconnect',
