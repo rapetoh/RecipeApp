@@ -215,100 +215,164 @@ export default function Home() {
             </div>
 
             {/* Right: Visual Content */}
-            <div className="relative h-[400px] sm:h-[500px] md:h-[600px] lg:h-[700px] flex items-center justify-center mt-8 md:mt-0">
-              {/* Main Food Image */}
-              <div className="w-full h-full rounded-2xl md:rounded-3xl overflow-hidden relative shadow-2xl">
-                <img
-                  src="https://storage.googleapis.com/banani-generated-images/generated-images/0179aeac-650f-453b-8ae7-1d063a83d0bc.jpg"
-                  alt="Fresh ingredients on table"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-              </div>
-
-              {/* Floating Card 1: Ingredients Detected - Top Left */}
-              <div className="absolute top-4 md:top-20 -left-4 md:-left-8 bg-white rounded-lg p-2 md:p-2.5 shadow-xl flex items-center gap-2 animate-float-strong border border-black/[0.05] z-10">
-                <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <ScanLine className="w-4 h-4 text-green-600" />
+            <div className="relative flex flex-col items-center justify-center mt-8 md:mt-0">
+              {/* Hero Image */}
+              <div className="relative w-full h-[350px] sm:h-[450px] md:h-[600px] lg:h-[700px]">
+                <div className="w-full h-full rounded-2xl md:rounded-3xl overflow-hidden relative shadow-2xl">
+                  <img
+                    src="https://storage.googleapis.com/banani-generated-images/generated-images/0179aeac-650f-453b-8ae7-1d063a83d0bc.jpg"
+                    alt="Fresh ingredients on table"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                 </div>
-                <div>
-                  <div className="font-bold text-xs text-green-900">Ingredients detected</div>
-                  <div className="text-[10px] text-gray-600">Red bell pepper, garlic, thyme</div>
-                </div>
-              </div>
 
-              {/* Floating Card 2: Voice Input - Top Right */}
-              <div className="absolute top-4 md:top-10 -right-4 md:-right-8 bg-white rounded-lg p-2 md:p-2.5 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '1.2s' }}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Mic className="w-3.5 h-3.5 text-white" />
+                {/* Desktop-only floating cards */}
+                <div className="hidden md:block">
+                  {/* Floating Card 1: Ingredients Detected - Top Left */}
+                  <div className="absolute top-20 -left-8 bg-white rounded-lg p-2.5 shadow-xl flex items-center gap-2 animate-float-strong border border-black/[0.05] z-10">
+                    <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <ScanLine className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-green-900">Ingredients detected</div>
+                      <div className="text-[10px] text-gray-600">Red bell pepper, garlic, thyme</div>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <div className="text-[10px] text-gray-600 mb-1.5">"I'm tired, want something quick"</div>
-                    <div className="flex gap-1 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">15‑min stir fry</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">Garlic butter pasta</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">One‑pan chicken</span>
+
+                  {/* Floating Card 2: Voice Input - Top Right */}
+                  <div className="absolute top-10 -right-8 bg-white rounded-lg p-2.5 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '1.2s' }}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Mic className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-[10px] text-gray-600 mb-1.5">"I'm tired, want something quick"</div>
+                        <div className="flex gap-1 flex-wrap">
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">15‑min stir fry</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">Garlic butter pasta</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full font-semibold text-gray-700">One‑pan chicken</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floating Card 3: Grocery List - Mid Right */}
+                  <div className="absolute top-64 -right-16 bg-white rounded-lg p-2.5 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '2.4s' }}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-6 h-6 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-gray-900 mb-1">Grocery list ready</div>
+                        <div className="flex gap-1 flex-wrap mb-1">
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Tomatoes</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Fresh basil</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Mozzarella</span>
+                        </div>
+                        <div className="text-[10px] text-gray-500">Auto‑generated from your meal plan</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floating Card 4: Photo → Recipe - Bottom Left */}
+                  <div className="absolute bottom-32 -left-10 bg-white rounded-lg p-3 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '0.6s' }}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-12 h-12 bg-gray-900 rounded-xl p-0.5 flex items-center justify-center flex-shrink-0 shadow-md">
+                        <div className="w-full h-full rounded-lg overflow-hidden relative">
+                          <img
+                            src="https://storage.googleapis.com/banani-generated-images/generated-images/fbefc29f-4913-461e-bde4-e8c8cfa947a6.jpg"
+                            alt="Pepperoni Pizza"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-1 border border-white/60 rounded"></div>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 pr-1">
+                        <div className="inline-flex items-center px-1.5 py-0.5 bg-cyan-50 border border-cyan-200 rounded-full mb-0.5">
+                          <span className="text-[9px] font-bold text-cyan-700">Photo → Recipe</span>
+                        </div>
+                        <div className="font-bold text-xs text-gray-900 mb-0.5">Pepperoni Pizza</div>
+                        <div className="text-[10px] text-gray-600">Identified from your photo · 95% match</div>
+                      </div>
+                      <div className="w-6 h-6 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                        <ChevronRight className="w-3 h-3 text-white" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floating Card 5: Search Recipes - Bottom Right */}
+                  <div className="absolute bottom-10 -right-2 bg-white rounded-lg p-2.5 shadow-xl animate-float-strong border border-blue-100 z-10" style={{ animationDelay: '1.8s', background: 'linear-gradient(135deg, #f9fafb, #eef2ff)' }}>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-[10px] font-semibold text-gray-700">Search recipes</div>
+                        <div className="text-[9px] font-semibold text-indigo-600 px-1.5 py-0.5 bg-indigo-50 rounded-full">by name</div>
+                      </div>
+                      <div className="bg-white rounded-full px-2 py-1.5 flex items-center gap-1.5 border border-gray-200 shadow-sm">
+                        <Search className="w-3 h-3 text-gray-500" />
+                        <span className="text-[10px] text-gray-600 truncate">"creamy tomato pasta"</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Floating Card 3: Grocery List - Mid Right */}
-              <div className="absolute top-1/3 md:top-64 -right-4 md:-right-16 bg-white rounded-lg p-2 md:p-2.5 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '2.4s' }}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="w-6 h-6 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Check className="w-3 h-3 text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xs font-semibold text-gray-900 mb-1">Grocery list ready</div>
-                    <div className="flex gap-1 flex-wrap mb-1">
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Tomatoes</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Fresh basil</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded-full text-gray-700">Mozzarella</span>
-                    </div>
-                    <div className="text-[10px] text-gray-500">Auto‑generated from your meal plan</div>
-                  </div>
-                </div>
-              </div>
+              {/* Mobile-only feature cards — infinite marquee */}
+              <div className="md:hidden mt-6 w-full overflow-hidden">
+                <div className="animate-marquee flex gap-3">
+                  {[...Array(2)].map((_, setIndex) => (
+                    <div key={setIndex} className="flex gap-3 flex-shrink-0">
+                      <div className="bg-white rounded-xl p-3 shadow-md border border-black/[0.05] flex items-center gap-2.5 flex-shrink-0" style={{ width: '180px' }}>
+                        <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <ScanLine className="w-4 h-4 text-green-600" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-green-900">Scan Ingredients</div>
+                          <div className="text-[10px] text-gray-600">Detect from photo</div>
+                        </div>
+                      </div>
 
-              {/* Floating Card 4: Photo → Recipe - Bottom Left */}
-              <div className="absolute bottom-20 md:bottom-32 -left-4 md:-left-10 bg-white rounded-lg p-2.5 md:p-3 shadow-xl animate-float-strong border border-black/[0.05] z-10" style={{ animationDelay: '0.6s' }}>
-                <div className="flex items-center gap-2 md:gap-2.5">
-                  <div className="w-12 h-12 bg-gray-900 rounded-xl p-0.5 flex items-center justify-center flex-shrink-0 shadow-md">
-                    <div className="w-full h-full rounded-lg overflow-hidden relative">
-                      <img
-                        src="https://storage.googleapis.com/banani-generated-images/generated-images/fbefc29f-4913-461e-bde4-e8c8cfa947a6.jpg"
-                        alt="Pepperoni Pizza"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-1 border border-white/60 rounded"></div>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 pr-1">
-                    <div className="inline-flex items-center px-1.5 py-0.5 bg-cyan-50 border border-cyan-200 rounded-full mb-0.5">
-                      <span className="text-[9px] font-bold text-cyan-700">Photo → Recipe</span>
-                    </div>
-                    <div className="font-bold text-xs text-gray-900 mb-0.5">Pepperoni Pizza</div>
-                    <div className="text-[10px] text-gray-600">Identified from your photo · 95% match</div>
-                  </div>
-                  <div className="w-6 h-6 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
-                    <ChevronRight className="w-3 h-3 text-white" />
-                  </div>
-                </div>
-              </div>
+                      <div className="bg-white rounded-xl p-3 shadow-md border border-black/[0.05] flex items-center gap-2.5 flex-shrink-0" style={{ width: '180px' }}>
+                        <div className="w-9 h-9 bg-gray-900 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Mic className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-gray-900">Voice Search</div>
+                          <div className="text-[10px] text-gray-600">Speak your cravings</div>
+                        </div>
+                      </div>
 
-              {/* Floating Card 5: Search Recipes - Bottom Right */}
-              <div className="absolute bottom-4 md:bottom-10 -right-4 md:-right-2 bg-white rounded-lg p-2 md:p-2.5 shadow-xl animate-float-strong border border-blue-100 z-10" style={{ animationDelay: '1.8s', background: 'linear-gradient(135deg, #f9fafb, #eef2ff)' }}>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="text-[10px] font-semibold text-gray-700">Search recipes</div>
-                    <div className="text-[9px] font-semibold text-indigo-600 px-1.5 py-0.5 bg-indigo-50 rounded-full">by name</div>
-                  </div>
-                  <div className="bg-white rounded-full px-2 py-1.5 flex items-center gap-1.5 border border-gray-200 shadow-sm">
-                    <Search className="w-3 h-3 text-gray-500" />
-                    <span className="text-[10px] text-gray-600 truncate">"creamy tomato pasta"</span>
-                  </div>
+                      <div className="bg-white rounded-xl p-3 shadow-md border border-black/[0.05] flex items-center gap-2.5 flex-shrink-0" style={{ width: '180px' }}>
+                        <div className="w-9 h-9 bg-cyan-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Camera className="w-4 h-4 text-cyan-600" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-gray-900">Photo → Recipe</div>
+                          <div className="text-[10px] text-gray-600">Snap any dish</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl p-3 shadow-md border border-black/[0.05] flex items-center gap-2.5 flex-shrink-0" style={{ width: '180px' }}>
+                        <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Check className="w-4 h-4 text-green-600" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-gray-900">Grocery Lists</div>
+                          <div className="text-[10px] text-gray-600">Auto from meal plan</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl p-3 shadow-md border border-black/[0.05] flex items-center gap-2.5 flex-shrink-0" style={{ width: '180px' }}>
+                        <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Search className="w-4 h-4 text-indigo-600" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-gray-900">Search Recipes</div>
+                          <div className="text-[10px] text-gray-600">Find by name</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -862,6 +926,14 @@ export default function Home() {
       </footer>
 
       <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+          animation: marquee 20s linear infinite;
+          width: max-content;
+        }
         @keyframes float-strong {
           0%, 100% { 
             transform: translateY(0) translateX(0) rotate(0deg); 
