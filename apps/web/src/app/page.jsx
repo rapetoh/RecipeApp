@@ -1,9 +1,20 @@
 import { Link } from 'react-router';
 import { useState, useEffect } from 'react';
+
 import { ChefHat, Sparkles, PlayCircle, Camera, ScanLine, Mic, Calendar, MonitorSmartphone, Star, Clock, Flame, User, Bookmark, ChevronRight, Menu, X, Check, ShoppingCart, Heart, Search, Utensils } from 'lucide-react';
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileMenuOpen]);
+
   // Initialize with fallback packages so prices show immediately
   const [packages, setPackages] = useState([
     {
@@ -99,7 +110,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       {/* Fixed Floating Navigation */}
-      <nav className="fixed top-3 md:top-6 left-1/2 transform -translate-x-1/2 z-50 px-3 md:px-6 py-1.5 rounded-full flex items-center gap-2 md:gap-8 w-[95%] md:w-auto max-w-7xl" style={{
+      <nav className="pointer-events-auto fixed top-3 md:top-6 left-2 right-2 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[10000] px-3 md:px-6 py-1.5 rounded-full flex items-center gap-2 md:gap-8 md:w-auto" style={{
         backgroundColor: 'rgba(255, 255, 255, 0.5)',
         backdropFilter: 'blur(20px) saturate(180%)',
         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
@@ -127,8 +138,15 @@ export default function Home() {
         </div>
         {/* Mobile Menu Button */}
         <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden ml-auto p-2 text-gray-600 hover:text-gray-900"
+          type="button"
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          className="md:hidden ml-auto flex h-11 min-w-[44px] shrink-0 items-center justify-center p-2 text-gray-600 hover:text-gray-900 touch-manipulation"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMobileMenuOpen((prev) => !prev);
+          }}
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -139,41 +157,64 @@ export default function Home() {
         >
           Download
         </a>
+
       </nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu — rendered as a fixed sibling above the nav (z-[10001]),
+          completely outside the nav DOM so no stacking-context / backdrop-filter
+          interaction can break it. No md:hidden needed: only mobileMenuOpen controls visibility. */}
       {mobileMenuOpen && (
-        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-40 rounded-2xl w-[90%] max-w-sm p-4 md:hidden" style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.5)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          border: '1px solid rgba(0, 0, 0, 0.1)',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5) inset'
-        }}>
-          <div className="flex flex-col gap-3">
-            <a 
-              href="#features" 
-              className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium py-2"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Features
-            </a>
-            <a 
-              href="#pricing" 
-              className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium py-2"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Pricing
-            </a>
-            <a
-              href={appStoreLink}
-              className="bg-gray-900 text-white h-10 px-5 rounded-full text-sm font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center whitespace-nowrap mt-2"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Download
-            </a>
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[9999]"
+            style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
+            aria-hidden="true"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Menu panel */}
+          <div
+            className="fixed z-[10001] rounded-2xl p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation menu"
+            style={{
+              top: '72px',
+              left: '8px',
+              right: '8px',
+              backgroundColor: 'rgba(255,255,255,0.97)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(0,0,0,0.1)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1">
+              <a
+                href="#features"
+                className="text-gray-700 hover:text-gray-900 text-sm font-medium py-3 px-2 rounded-xl hover:bg-gray-50 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Features
+              </a>
+              <a
+                href="#pricing"
+                className="text-gray-700 hover:text-gray-900 text-sm font-medium py-3 px-2 rounded-xl hover:bg-gray-50 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </a>
+              <a
+                href={appStoreLink}
+                className="mt-2 bg-gray-900 text-white h-10 px-5 rounded-full text-sm font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Download on the App Store
+              </a>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Hero Section */}
