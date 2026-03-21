@@ -767,14 +767,44 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-10">
           <div className="flex flex-col items-center text-center mb-8 md:mb-16">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4">Simple, transparent pricing</h2>
-            <p className="text-base md:text-lg text-gray-600 max-w-lg">
-              Choose the plan that works best for you. Cancel anytime.
+            <p className="text-base md:text-lg text-gray-600 max-w-2xl">
+              PocketChef is <strong className="text-gray-900">free to download and use</strong> with a generous free tier. Upgrade to Premium when you want unlimited AI features. Cancel anytime.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto">
+            {/* Free tier */}
+            <div className="bg-gray-50 border-2 border-gray-200 rounded-2xl md:rounded-3xl p-6 md:p-8 hover:border-gray-300 transition-all flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Free</h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl md:text-5xl font-bold text-gray-900">$0</span>
+                  <span className="text-gray-600">forever</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">Full app access with monthly limits on AI-powered features.</p>
+              </div>
+              <ul className="space-y-3 mb-6 flex-1">
+                {[
+                  "All core features: meal planning, grocery lists, cooking mode, collections",
+                  "Limited monthly uses of voice suggestions, photo scan, ingredients scan & recipe generation",
+                  "Upgrade anytime from the app",
+                ].map((feature, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm md:text-base text-gray-600">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={appStoreLink}
+                className="block w-full bg-white border-2 border-gray-300 text-gray-900 text-center py-3 md:py-4 rounded-xl font-semibold hover:bg-gray-100 transition-colors mt-auto"
+              >
+                Download free
+              </a>
+            </div>
+
             {/* Monthly Plan */}
-            <div className="bg-white border-2 border-gray-200 rounded-2xl md:rounded-3xl p-6 md:p-8 hover:border-orange-500 transition-all">
+            <div className="bg-white border-2 border-gray-200 rounded-2xl md:rounded-3xl p-6 md:p-8 hover:border-orange-500 transition-all flex flex-col">
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Monthly</h3>
                 {isLoadingPrices ? (
@@ -790,7 +820,7 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              <ul className="space-y-3 mb-6">
+              <ul className="space-y-3 mb-6 flex-1">
                 {[
                   "Unlimited voice suggestions (Vibe feature)",
                   "Unlimited food recognition (photo scan)",
@@ -805,14 +835,14 @@ export default function Home() {
               </ul>
               <a
                 href={appStoreLink}
-                className="block w-full bg-gray-900 text-white text-center py-3 md:py-4 rounded-xl font-semibold hover:bg-gray-800 transition-colors"
+                className="block w-full bg-gray-900 text-white text-center py-3 md:py-4 rounded-xl font-semibold hover:bg-gray-800 transition-colors mt-auto"
               >
-                Get Started
+                Get Premium
               </a>
             </div>
 
             {/* Yearly Plan - Featured */}
-            <div className="bg-orange-50 border-2 border-orange-500 rounded-2xl md:rounded-3xl p-6 md:p-8 relative hover:shadow-lg transition-all">
+            <div className="bg-orange-50 border-2 border-orange-500 rounded-2xl md:rounded-3xl p-6 md:p-8 relative hover:shadow-lg transition-all flex flex-col">
               <div className="absolute top-4 right-4 bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold">
                 BEST VALUE
               </div>
@@ -836,7 +866,7 @@ export default function Home() {
                   </>
                 )}
               </div>
-              <ul className="space-y-3 mb-6">
+              <ul className="space-y-3 mb-6 flex-1">
                 {[
                   "Everything in Monthly",
                   `${savings}% savings vs monthly`,
@@ -851,15 +881,15 @@ export default function Home() {
               </ul>
               <a
                 href={appStoreLink}
-                className="block w-full bg-orange-600 text-white text-center py-3 md:py-4 rounded-xl font-semibold hover:bg-orange-700 transition-colors"
+                className="block w-full bg-orange-600 text-white text-center py-3 md:py-4 rounded-xl font-semibold hover:bg-orange-700 transition-colors mt-auto"
               >
-                Get Started
+                Get Premium
               </a>
             </div>
           </div>
 
-          <p className="text-center text-sm text-gray-500 mt-8">
-            All subscriptions are managed through the App Store. Cancel anytime in your device settings.
+          <p className="text-center text-sm text-gray-500 mt-8 max-w-2xl mx-auto">
+            Free tier includes monthly limits on AI features. Premium unlocks unlimited AI. Subscriptions are managed in the App Store; cancel anytime in device settings.
           </p>
         </div>
       </section>
